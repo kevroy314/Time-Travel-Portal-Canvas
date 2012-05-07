@@ -12,7 +12,7 @@ function LoadGameState(GameState){
 	jQuery.extend(true,pc,GameState.pc);
 	jQuery.extend(true,testObjs,GameState.objList);
 	timeTravelOffset+=(currentTime-GameState.t);
-	currentTime = getCurrentTime();
+	currentTime = getTimeTravelAdjustedTime();
 	nextRenderTime = currentTime+1;
 }
 

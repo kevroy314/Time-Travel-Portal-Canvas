@@ -100,7 +100,7 @@ function WindowResizeEvent(){
 //This function makes sure the simulation time is not interrupted by losing focus on the window.
 //Without this function, the game would play catchup every time you left the tab and came back (very annoying).
 function OnFocusEvent(){
-	nextRenderTime = getCurrentTime();
+	nextRenderTime = getTimeTravelAdjustedTime();
 }
 
 //This function watches for if the canvas is dragged and sets a flag saying it has which prevents it from being
