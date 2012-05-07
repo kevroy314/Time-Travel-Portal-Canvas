@@ -1,4 +1,4 @@
-$(function() {
+/*$(function() {
 	$( "#mainCanvas" ).draggable();
 	$( "#reportCanvas" ).draggable();
-});
+});*/

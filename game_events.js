@@ -37,6 +37,7 @@ function HandleKeyEvents(t){
 			var dy = 0;
 			pc.move(dx,dy);
 			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+			printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 		}
 		if(keyStates[38]){ //Up Key
 			var dx = 0;
@@ -44,6 +45,7 @@ function HandleKeyEvents(t){
 			if(pc.Y+dy<0) dy=0;
 			pc.move(dx,dy);
 			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+			printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 		}
 		if(keyStates[39]){ //Right Key
 			var dx = pc.SuggestedXVel;
@@ -51,6 +53,7 @@ function HandleKeyEvents(t){
 			var dy = 0;
 			pc.move(dx,dy);
 			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+			printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 		}
 		if(keyStates[40]){ //Down Key
 			var dx = 0;
@@ -58,6 +61,7 @@ function HandleKeyEvents(t){
 			if(pc.Y+dy+pc.height>canvas.height) dy=0;
 			pc.move(dx,dy);
 			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+			printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 		}
 		if(keyStates[49]){ //1 key
 			var stateObjectArray = new Array();
@@ -74,6 +78,7 @@ function HandleKeyEvents(t){
 			statePlayerCharacter.createInPortal(gs);
 			pc.createInPortal(gs);
 			inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
+			printInputStack(InputStackEventType.PlayerActionEvent,currentTime,'portal','in');
 		}
 		if(keyStates[50]){ //2 key
 			var stateObjectArray = new Array();
@@ -90,18 +95,21 @@ function HandleKeyEvents(t){
 			statePlayerCharacter.createInPortal(gs);
 			pc.createOutPortal(gs);
 			inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
+			printInputStack(InputStackEventType.PlayerActionEvent,currentTime,'portal','out');
 		}
 	}
 }
 
 //This function centeres the canvas if it has not been dragged (triggered when the window resizes)
 function WindowResizeEvent(){
-	if(!hasBeenDragged){
+	/*if(!hasBeenDragged){
 		canvas.style.top = (window.innerHeight-canvas.height)/2;
 		canvas.style.left = (window.innerWidth-canvas.width)/2;
 		reportCanvas.style.top = (window.innerHeight-reportCanvas.height)/2;
 		reportCanvas.style.left = parseInt(mainCanvas.style.left)-reportCanvas.width-50;
-	}
+	}*/
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
 }
 
 //This function makes sure the simulation time is not interrupted by losing focus on the window.
@@ -110,8 +118,8 @@ function OnFocusEvent(){
 	nextRenderTime = getTimeTravelAdjustedTime();
 }
 
-//This function watches for if the canvas is dragged and sets a flag saying it has which prevents it from being
+/*//This function watches for if the canvas is dragged and sets a flag saying it has which prevents it from being
 //auto-centered later.
 function CanvasDragEvent(){
 	hasBeenDragged = true;
-}
+}*/

@@ -15,7 +15,7 @@ var updateCount;
 
 var canvas; //The primary canvas element (the space where things are rendered)
 var context; //The primary context element (for drawing)
-var hasBeenDragged; //Boolean representing if the window has been dragged (prevents auto-centering on window resize when true)
+//var hasBeenDragged; //Boolean representing if the window has been dragged (prevents auto-centering on window resize when true)
 
 var keyStates; //Boolean array representing the state of the keyboard
 
@@ -26,20 +26,31 @@ var numTestObjs; //Number of object to be populated into the testObjs array on i
 var inputStack; //The stack containing all user actions
 var pcGhost;
 var pcGhostInputStack;
+var pcGhostInputStackPointer;
+
+var debugConsole;
+var debugStack;
 
 //This function initializes all the game variables and starts the game loop.
 function Initialize(){
+	debugConsole = document.getElementById("debugConsole");
+	debugConsole.setAttribute('style','overflow:scroll;color:white;font-size:10px;position:absolute;top:0px;left:0px;border:1px solid white;width:'+(window.innerWidth/5-2)+'px;height:'+(window.innerHeight-2)+'px;');
+	debugStack = document.createElement('ol');
+	debugConsole.appendChild(debugStack);
 	timeIsForward = true; //We go forward in time by default
 	canvas = document.getElementById("mainCanvas")
-	canvas.ondrag = CanvasDragEvent; //Drag event for the canvas
+	canvas.setAttribute('style','position:absolute;top:0px;left:'+(window.innerWidth/5)+'px;');
+	canvas.width = window.innerWidth*4/5;
+	canvas.height = window.innerHeight;
+	//canvas.ondrag = CanvasDragEvent; //Drag event for the canvas
 	context = canvas.getContext("2d");
-	hasBeenDragged = false; //Canvas hasn't been dragged by default
+	//hasBeenDragged = false; //Canvas hasn't been dragged by default
 	keyStates = new Array();
 	
-	//Canvas position is fixed and centered
-	canvas.style.position = "fixed";
-	canvas.style.top = (window.innerHeight-canvas.height)/2;
-	canvas.style.left = (window.innerWidth-canvas.width)/2;
+	////Canvas position is fixed and centered
+	//canvas.style.position = "fixed";
+	//canvas.style.top = (window.innerHeight-canvas.height)/2;
+	//canvas.style.left = (window.innerWidth-canvas.width)/2;
 
 	pcGhost = null;
 	pcGhostInputStack = new Array();
@@ -63,10 +74,10 @@ function Initialize(){
 	maxRenderSkips = 5; //This number can be changed to allow more updates between renders (
 	nextRenderTime = 0; //Represents when we're going to render again
 	
-	InitiatlizeReportCanvas();
+	//InitiatlizeReportCanvas();
 	
 	GameLoop(); //Start the game!
-	ReportCanvasLoop();
+	//ReportCanvasLoop();
 }
 
 function Draw(){
@@ -100,20 +111,41 @@ function Update(dt){
 	HandleKeyEvents(); //First handle any user input
 	for(var i = 0; i < numTestObjs; i++) //Update each test object
 		testObjs[i].update(currentTime,dt,[pc]);
-	if(pcGhost!=null&&pcGhostInputStack.length>0){
-		while(pcGhostInputStack.length>0&&pcGhostInputStack[pcGhostInputStack.length-1][1]<nextRenderTime){
-			var eventToProcess = pcGhostInputStack.pop();
+	if(pcGhost!=null){
+		if(timeIsForward){
+			pcGhost.color = "#F000F0";
+			while(pcGhostInputStackPointer>0&&pcGhostInputStackPointer<pcGhostInputStack.length&&pcGhostInputStack[pcGhostInputStackPointer][1]<nextRenderTime){
+				var eventToProcess = pcGhostInputStack[pcGhostInputStackPointer];
+				pcGhostInputStackPointer--;
 				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
 					pcGhost.move(eventToProcess[2],eventToProcess[3]);
 				}
 				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
 					jQuery.extend(true, pcGhost, eventToProcess[2].pc);
-					pcGhost.color = "#F000F0";
 				}
+			}
 		}
-	}
-	else{
-		pcGhost=null;
+		else if(!timeIsForward){
+			pcGhost.color = "#F000F0";
+			while(pcGhostInputStackPointer>0&&pcGhostInputStackPointer<pcGhostInputStack.length&&pcGhostInputStack[pcGhostInputStackPointer][1]>nextRenderTime){
+				var eventToProcess = pcGhostInputStack[pcGhostInputStackPointer];
+				pcGhostInputStackPointer++;
+				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
+					pcGhost.move(-eventToProcess[2],-eventToProcess[3]);
+				}
+				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
+					jQuery.extend(true, pcGhost, eventToProcess[2].pc);
+				}
+			}
+		}
+		if(pcGhostInputStackPointer<0){
+			pcGhost.visible = false;
+			pcGhostInputStackPointer = 0;
+		}
+		else if(pcGhostInputStackPointer>pcGhostInputStack.length){
+			pcGhost.visible = false;
+			pcGhostInputStackPointer = pcGhostInputStack.length-1;
+		}
 	}
 }
 
@@ -158,6 +190,7 @@ function ReverseGameLoop(){
 			Update(-1);
 			while(inputStack.length>0&&inputStack[inputStack.length-1][1]>nextRenderTime){
 				var eventToProcess = inputStack.pop();
+				removeLinePrintUserInputStack();
 				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
 					pc.move(-eventToProcess[2],-eventToProcess[3]);
 				}
@@ -183,4 +216,23 @@ function ReverseGameLoop(){
 	else if(!timeIsForward){
 		setTimeout(ReverseGameLoop,renderInterval);
 	}
+}
+function printInputStack(movementEventType,currentTime,dx,dy){
+	var output = "<li class='userStackItem'>";
+	if(movementEventType==InputStackEventType.PlayerMovementEvent)
+		output+="move(";
+	else if(movementEventType==InputStackEventType.PlayerActionEvent)
+		output+="act(";
+	output+=""+currentTime;
+	output+=","+dx;
+	output+=","+dy;
+	output+=")"
+	var outputElement = document.createElement('li');
+	outputElement.setAttribute('class','userStackItem');
+	outputElement.innerHTML = output;
+	debugStack.appendChild(outputElement);
+}
+function removeLinePrintUserInputStack(){
+	var removeElement = debugStack.childNodes[debugStack.childNodes.length-1];
+	debugStack.removeChild(removeElement);
 }

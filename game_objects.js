@@ -40,6 +40,7 @@ function PlayerCharacter(startX, startY, startColor){
 	this.color = startColor;
 	this.inPortal = null;
 	this.outPortal = null;
+	this.visible = true;
 	this.move = function(XVel,YVel){
 		var newX = this.X+XVel;
 		var newY = this.Y+YVel;
@@ -80,6 +81,7 @@ function PlayerCharacter(startX, startY, startColor){
 						while(inputStack.length>0&&inputStack[inputStack.length-1][1]!=this.inPortal.GameState.t){
 							pcGhostInputStack.push(inputStack.pop());
 						}
+						pcGhostInputStackPointer = pcGhostInputStack.length-1;
 					}
 					this.immuneToPortal = 1;
 					return true;
@@ -93,14 +95,16 @@ function PlayerCharacter(startX, startY, startColor){
 		return false;
 	}
 	this.draw = function(ctx){
-		if(this.inPortal!=null){
-			this.inPortal.draw(ctx);
+		if(this.visible){
+			if(this.inPortal!=null){
+				this.inPortal.draw(ctx);
+			}
+			if(this.outPortal!=null){
+				this.outPortal.draw(ctx);
+			}
+			ctx.fillStyle = this.color;
+			ctx.fillRect(this.X,this.Y,this.width,this.height);
 		}
-		if(this.outPortal!=null){
-			this.outPortal.draw(ctx);
-		}
-		ctx.fillStyle = this.color;
-		ctx.fillRect(this.X,this.Y,this.width,this.height);
 	}
 	this.createInPortal = function(GameState){
 		this.outPortal = null;
