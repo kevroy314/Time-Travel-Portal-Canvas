@@ -14,6 +14,7 @@ function KeyDownEvent(e){
 		timeIsForward = false;
 	}
 	keyStates[e.keyCode] = true;
+	if(e.keyCode==17||e.keyCode==82) return true;
 	return false;
 }
 
@@ -64,10 +65,12 @@ function HandleKeyEvents(t){
 				stateObjectArray[i] = jQuery.extend(true,{},testObjs[i]);
 			var previousStatePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
 			jQuery.extend(true,previousStatePlayerCharacter,pc);
-			var gs0 = new GameState(currentTime,previousStatePlayerCharacter,stateObjectArray);
+			var inputStackClone = new Array();
+			jQuery.extend(true,inputStackClone,inputStack);
+			var gs0 = new GameState(currentTime,updateCount,previousStatePlayerCharacter,stateObjectArray,inputStackClone);
 			var statePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
 			jQuery.extend(true,statePlayerCharacter,pc);
-			var gs = new GameState(currentTime,statePlayerCharacter,stateObjectArray);
+			var gs = new GameState(currentTime,updateCount,statePlayerCharacter,stateObjectArray,inputStackClone);
 			statePlayerCharacter.createInPortal(gs);
 			pc.createInPortal(gs);
 			inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
@@ -78,10 +81,12 @@ function HandleKeyEvents(t){
 				stateObjectArray[i] = jQuery.extend(true,{},testObjs[i]);
 			var previousStatePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
 			jQuery.extend(true,previousStatePlayerCharacter,pc);
-			var gs0 = new GameState(currentTime,previousStatePlayerCharacter,stateObjectArray);
+			var inputStackClone = new Array();
+			jQuery.extend(true,inputStackClone,inputStack);
+			var gs0 = new GameState(currentTime,updateCount,previousStatePlayerCharacter,stateObjectArray,inputStackClone);
 			var statePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
 			jQuery.extend(true,statePlayerCharacter,pc);
-			var gs = new GameState(currentTime,statePlayerCharacter,stateObjectArray);
+			var gs = new GameState(currentTime,updateCount,statePlayerCharacter,stateObjectArray,inputStackClone);
 			statePlayerCharacter.createInPortal(gs);
 			pc.createOutPortal(gs);
 			inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
@@ -94,6 +99,8 @@ function WindowResizeEvent(){
 	if(!hasBeenDragged){
 		canvas.style.top = (window.innerHeight-canvas.height)/2;
 		canvas.style.left = (window.innerWidth-canvas.width)/2;
+		reportCanvas.style.top = (window.innerHeight-reportCanvas.height)/2;
+		reportCanvas.style.left = parseInt(mainCanvas.style.left)-reportCanvas.width-50;
 	}
 }
 

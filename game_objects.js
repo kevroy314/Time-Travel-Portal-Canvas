@@ -1,9 +1,11 @@
 //Game state object which forms a circular chain with Portal and PlayerCharacter objects
 //Represents the state of the game at a given time 't'
-function GameState(Time, Player, Objects){
-	this.pc = Player; //Current state of PlayerCharacter variable
-	this.objList = Objects; //Current state of array of deterministic objects with time-stepped update function
-	this.t = Time; //Time of current state
+function GameState(currentTime, currentUpdateCount, currentPlayerState, currentObjectStates, currentInputStack){
+	this.pc = currentPlayerState; //Current state of PlayerCharacter variable
+	this.objList = currentObjectStates; //Current state of array of deterministic objects with time-stepped update function
+	this.t = currentTime; //Time of current state
+	this.updateCount = currentUpdateCount;
+	this.inputStack = currentInputStack;
 }
 
 //Function which loads a game state, adjusts the appropriate timers to allow for state to be loaded while
@@ -11,6 +13,7 @@ function GameState(Time, Player, Objects){
 function LoadGameState(GameState){
 	jQuery.extend(true,pc,GameState.pc);
 	jQuery.extend(true,testObjs,GameState.objList);
+	updateCount = GameState.updateCount;
 	timeTravelOffset+=(currentTime-GameState.t);
 	currentTime = getTimeTravelAdjustedTime();
 	nextRenderTime = currentTime+1;
@@ -27,14 +30,14 @@ function LoadGameState(GameState){
 //It has a function to create each portal which enforces the rules requiring the in portal to be created first.
 //It has two helper functions which help determine if (and how much) a rectangle overlaps with another rectangle.
 //The function tracks portal immunity for both portals allowing bi-directional travel at if required later.
-function PlayerCharacter(startX, startY){
+function PlayerCharacter(startX, startY, startColor){
 	this.X = startX;
 	this.Y = startY;
 	this.width = 10;
 	this.height = 10;
 	this.SuggestedXVel = 4;
 	this.SuggestedYVel = 4;
-	this.color = "#FFFFFF";
+	this.color = startColor;
 	this.inPortal = null;
 	this.outPortal = null;
 	this.move = function(XVel,YVel){
@@ -73,8 +76,10 @@ function PlayerCharacter(startX, startY){
 				if(this.immuneToPortal!=2&&this.inPortal!=null){
 					if(timeIsForward){
 						LoadGameState(this.inPortal.GameState);
-						while(inputStack.length>0&&inputStack[inputStack.length-1][1]!=this.inPortal.GameState.t)
-							inputStack.pop();
+						pcGhost = new PlayerCharacter(this.X,this.Y,"#F000F0");
+						while(inputStack.length>0&&inputStack[inputStack.length-1][1]!=this.inPortal.GameState.t){
+							pcGhostInputStack.push(inputStack.pop());
+						}
 					}
 					this.immuneToPortal = 1;
 					return true;

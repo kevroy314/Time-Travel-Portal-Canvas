@@ -10,7 +10,6 @@ var maxRenderSkips; //Number of frames we're allowed to skip rendering
 	
 var nextRenderTime; //Next render tick
 var renderSkipsCount; //Number of times we update before rendering for given iteration
-var totalRenderSkipsCount;
 var currentTime; //Current simulation time
 var updateCount;
 
@@ -25,6 +24,8 @@ var testObjs; //Array of deterministic objects with time-stepped update function
 var numTestObjs; //Number of object to be populated into the testObjs array on initialization
 
 var inputStack; //The stack containing all user actions
+var pcGhost;
+var pcGhostInputStack;
 
 //This function initializes all the game variables and starts the game loop.
 function Initialize(){
@@ -40,14 +41,17 @@ function Initialize(){
 	canvas.style.top = (window.innerHeight-canvas.height)/2;
 	canvas.style.left = (window.innerWidth-canvas.width)/2;
 
+	pcGhost = null;
+	pcGhostInputStack = new Array();
+	
 	inputStack = new Array();
 	
-	pc = new PlayerCharacter(canvas.width/2,canvas.height/2); //Player starts in the middle
+	pc = new PlayerCharacter(canvas.width/2,canvas.height/2, "#FFFFFF"); //Player starts in the middle
 	pc.X-=pc.width/2;
 	pc.Y-=pc.height/2;
 	
 	testObjs = new Array();
-	numTestObjs = 50; //Number of test objects to be populated at the beginning
+	numTestObjs = 100; //Number of test objects to be populated at the beginning
 	for(var i = 0; i < numTestObjs; i++) //Random position in the canvas and random velocity between -5 and 5
 		testObjs[i] = new TestProjectile(Math.round(Math.random()*canvas.width),Math.round(Math.random()*canvas.height),Math.round(Math.random()*10-5),Math.round(Math.random()*10-5));
 	
@@ -58,7 +62,6 @@ function Initialize(){
 	renderInterval = 33; //1000ms/30 ticks per second
 	maxRenderSkips = 5; //This number can be changed to allow more updates between renders (
 	nextRenderTime = 0; //Represents when we're going to render again
-	totalRenderSkipsCount = 0;
 	
 	InitiatlizeReportCanvas();
 	
@@ -80,6 +83,10 @@ function Draw(){
 	//Draw the player
 	pc.draw(context);
 	
+	if(pcGhost!=null){
+		pcGhost.draw(context);
+	}
+	
 	//Overlay some stats
 	context.fillStyle = "#FFFFFF";
 	context.fillText("Current Time: "+ currentTime,10,10);
@@ -87,11 +94,27 @@ function Draw(){
 
 //The Update function takes a time step and updates the positions of the objects as well as the player.
 function Update(dt){
-	if(timeIsForward) updateCount++;
-	else updateCount--;
+	if(updateCount==0&&dt<0) return;
+	if(dt>0) updateCount++;
+	else if(dt<0) updateCount--;
 	HandleKeyEvents(); //First handle any user input
 	for(var i = 0; i < numTestObjs; i++) //Update each test object
 		testObjs[i].update(currentTime,dt,[pc]);
+	if(pcGhost!=null&&pcGhostInputStack.length>0){
+		while(pcGhostInputStack.length>0&&pcGhostInputStack[pcGhostInputStack.length-1][1]<nextRenderTime){
+			var eventToProcess = pcGhostInputStack.pop();
+				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
+					pcGhost.move(eventToProcess[2],eventToProcess[3]);
+				}
+				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
+					jQuery.extend(true, pcGhost, eventToProcess[2].pc);
+					pcGhost.color = "#F000F0";
+				}
+		}
+	}
+	else{
+		pcGhost=null;
+	}
 }
 
 //Calculates the relative time given the amount we've time travelled total and the reference time
@@ -111,7 +134,6 @@ function GameLoop(){
 		nextRenderTime+=renderInterval;
 		renderSkipsCount++; //Iterate renderSkipsCount
 	}
-	totalRenderSkipsCount+=renderSkipsCount;
 	currentTime = getTimeTravelAdjustedTime(); //Update the current time to our relative time
 	
 	Draw(); //Render the scene
@@ -146,7 +168,6 @@ function ReverseGameLoop(){
 			nextRenderTime-=renderInterval;
 			renderSkipsCount++;
 		}
-		totalRenderSkipsCount-=renderSkipsCount;
 	}
 	else{ //If we've hit the stop time, copy the stop state and adjust the offset
 		timeTravelOffset+=(-currentTime);
