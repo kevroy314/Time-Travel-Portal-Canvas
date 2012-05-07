@@ -1,0 +1,3 @@
+$(function() {
+	$( "#mainCanvas" ).draggable();
+});
