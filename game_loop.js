@@ -51,7 +51,7 @@ function Initialize(){
 	pc.Y-=pc.height/2;
 	
 	testObjs = new Array();
-	numTestObjs = 100; //Number of test objects to be populated at the beginning
+	numTestObjs = 25; //Number of test objects to be populated at the beginning
 	for(var i = 0; i < numTestObjs; i++) //Random position in the canvas and random velocity between -5 and 5
 		testObjs[i] = new TestProjectile(Math.round(Math.random()*canvas.width),Math.round(Math.random()*canvas.height),Math.round(Math.random()*10-5),Math.round(Math.random()*10-5));
 	
