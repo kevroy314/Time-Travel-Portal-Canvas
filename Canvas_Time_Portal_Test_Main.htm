@@ -1,0 +1,98 @@
+<html>
+<head>
+<title>Time Portal Test</title>
+<script src="PlayerCharacter.js"></script>
+<script type="text/javascript">
+
+window.onload = Initialize;
+window.onkeydown = KeyDownEvent;
+window.onkeyup = KeyUpEvent;
+
+var canvas;
+
+var keyStates = {};
+
+var gLoop;
+
+var drawIteration = 0;
+var updateIteration = 0;
+var textX = 50, textY = 50;
+
+var pc = new PlayerCharacter(100,100,"testSprite.png","testPortalIn.png","testPortalOut.png");
+
+function KeyDownEvent(e){
+	keyStates[e.keyCode] = 1;
+	return false;
+}
+
+function KeyUpEvent(e){
+	keyStates[e.keyCode] = 0;
+	return false;
+}
+
+function HandleKeyEvents(){
+	if(keyStates[37]){ //Left
+		var newX = pc.X-pc.XVel;
+		if(!(newX<0))
+			pc.move(-pc.XVel,0);
+	}
+	if(keyStates[38]){ //Up
+		var newY = pc.Y-pc.YVel;
+		if(!(newY<0))
+			pc.move(0,-pc.YVel);
+	}
+	if(keyStates[39]){ //Right
+		var newX = pc.X+pc.XVel;
+		if(!(newX+pc.image.width>canvas.width))
+			pc.move(pc.XVel,0);
+	}
+	if(keyStates[40]){ //Down
+		var newY = pc.Y+pc.YVel;
+		if(!(newY+pc.image.height>canvas.height))
+			pc.move(0,pc.YVel);
+	}
+	if(keyStates[49]){ //1
+		pc.createInPortal(updateIteration);
+	}
+	if(keyStates[50]){ //2
+		pc.createOutPortal();
+	}
+	if(keyStates[51]){ //3
+	}
+}
+
+function draw(){
+	if(canvas.getContext){
+		var ctx = canvas.getContext('2d');
+		ctx.fillStyle = "#FFFFFF";
+		ctx.fillRect(0,0,canvas.width,canvas.height);
+		ctx.fillStyle = "#000000";
+		ctx.fillText("D: "+drawIteration+", U: "+updateIteration,textX,textY);
+		pc.draw(ctx);
+		drawIteration++;
+	}
+}
+
+function update(){
+	HandleKeyEvents();
+	updateIteration++;
+}
+
+function GameLoop(){
+	draw();
+	update();
+	gLoop = setTimeout(GameLoop, 1000/50);
+}
+
+function Initialize(){
+	canvas = document.getElementById("mainCanvas");
+	GameLoop();
+}
+</script>
+</head>
+<body bgcolor="#000000">
+<canvas id="mainCanvas" width=500 height=500>
+Your browser doesn't support the HTML5 canvas element!
+</canvas>
+</body>
+</html>
