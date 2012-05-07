@@ -4,6 +4,8 @@ window.onkeyup = KeyUpEvent; //When we release a key, call the KeyUpEvent functi
 window.onresize = WindowResizeEvent; //When we resize the window, call the WindowResizeEvent function (auto-center if not manually moved)
 window.onfocus = OnFocusEvent; //When the window is focused, reset the game timers to avoid "Catch-Up" effect (disable to create "Catch-Up" effect
 
+var InputStackEventType = { PlayerMovementEvent:0, PlayerActionEvent:1 };
+
 //This function handles the key being pressed down. It modifies the keyStates array and watches for continuous
 //time travel requests (this is performed via a "dead man's switch" which must be held to continue travelling
 //back in time). It blocks the keyboard events from being passed along to the browser.
@@ -27,55 +29,63 @@ function KeyUpEvent(e){
 
 //This function handles key events which trigger while a key is depressed.
 function HandleKeyEvents(t){
-	if(keyStates[37]){ //Left Key
-		var dx = -pc.SuggestedXVel;
-		if(pc.X+dx<0) dx=0;
-		var dy = 0;
-		pc.move(dx,dy);
-		inputStack.push([currentTime,dx,dy]);
-	}
-	if(keyStates[38]){ //Up Key
-		var dx = 0;
-		var dy = -pc.SuggestedYVel;
-		if(pc.Y+dy<0) dy=0;
-		pc.move(dx,dy);
-		inputStack.push([currentTime,dx,dy]);
-	}
-	if(keyStates[39]){ //Right Key
-		var dx = pc.SuggestedXVel;
-		if(pc.X+dx+pc.width>canvas.width) dx=0;
-		var dy = 0;
-		pc.move(dx,dy);
-		inputStack.push([currentTime,dx,dy]);
-	}
-	if(keyStates[40]){ //Down Key
-		var dx = 0;
-		var dy = pc.SuggestedYVel;
-		if(pc.Y+dy+pc.height>canvas.height) dy=0;
-		pc.move(dx,dy);
-		inputStack.push([currentTime,dx,dy]);
-	}
-	if(keyStates[49]){ //1 key
-		var tmpArray = new Array();
-		for(var i = 0; i < testObjs.length;i++)
-			tmpArray[i] = jQuery.extend(true,{},testObjs[i]);
-		var tmpObj = new PlayerCharacter(pc.X,pc.Y);
-		jQuery.extend(true,tmpObj,pc);
-		var gs = new GameState(currentTime,tmpObj,tmpArray);
-		tmpObj.createInPortal(gs);
-		pc.createInPortal(gs);
-		inputStack.push([gs]);
-	}
-	if(keyStates[50]){ //2 key
-		var tmpArray = new Array();
-		for(var i = 0; i < testObjs.length;i++)
-			tmpArray[i] = jQuery.extend(true,{},testObjs[i]);
-		var tmpObj = new PlayerCharacter(pc.X,pc.Y);
-		jQuery.extend(true,tmpObj,pc);
-		var gs = new GameState(currentTime,tmpObj,tmpArray);
-		tmpObj.createInPortal(gs);
-		pc.createOutPortal(gs);
-		inputStack.push([gs]);
+	if(timeIsForward){
+		if(keyStates[37]){ //Left Key
+			var dx = -pc.SuggestedXVel;
+			if(pc.X+dx<0) dx=0;
+			var dy = 0;
+			pc.move(dx,dy);
+			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		}
+		if(keyStates[38]){ //Up Key
+			var dx = 0;
+			var dy = -pc.SuggestedYVel;
+			if(pc.Y+dy<0) dy=0;
+			pc.move(dx,dy);
+			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		}
+		if(keyStates[39]){ //Right Key
+			var dx = pc.SuggestedXVel;
+			if(pc.X+dx+pc.width>canvas.width) dx=0;
+			var dy = 0;
+			pc.move(dx,dy);
+			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		}
+		if(keyStates[40]){ //Down Key
+			var dx = 0;
+			var dy = pc.SuggestedYVel;
+			if(pc.Y+dy+pc.height>canvas.height) dy=0;
+			pc.move(dx,dy);
+			inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		}
+		if(keyStates[49]){ //1 key
+			var stateObjectArray = new Array();
+			for(var i = 0; i < testObjs.length;i++)
+				stateObjectArray[i] = jQuery.extend(true,{},testObjs[i]);
+			var previousStatePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
+			jQuery.extend(true,previousStatePlayerCharacter,pc);
+			var gs0 = new GameState(currentTime,previousStatePlayerCharacter,stateObjectArray);
+			var statePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
+			jQuery.extend(true,statePlayerCharacter,pc);
+			var gs = new GameState(currentTime,statePlayerCharacter,stateObjectArray);
+			statePlayerCharacter.createInPortal(gs);
+			pc.createInPortal(gs);
+			inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
+		}
+		if(keyStates[50]){ //2 key
+			var stateObjectArray = new Array();
+			for(var i = 0; i < testObjs.length;i++)
+				stateObjectArray[i] = jQuery.extend(true,{},testObjs[i]);
+			var previousStatePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
+			jQuery.extend(true,previousStatePlayerCharacter,pc);
+			var gs0 = new GameState(currentTime,previousStatePlayerCharacter,stateObjectArray);
+			var statePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
+			jQuery.extend(true,statePlayerCharacter,pc);
+			var gs = new GameState(currentTime,statePlayerCharacter,stateObjectArray);
+			statePlayerCharacter.createInPortal(gs);
+			pc.createOutPortal(gs);
+			inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
+		}
 	}
 }
 

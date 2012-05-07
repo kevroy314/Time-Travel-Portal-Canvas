@@ -47,7 +47,7 @@ function PlayerCharacter(startX, startY){
 									  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
 									  newX,newY,
 									  newX+this.width,newY+this.height);
-			var overlapInPortalBoolean = this.doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
+			var overlapInPortalBoolean = doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
 									  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
 									  newX,newY,
 									  newX+this.width,newY+this.height);
@@ -64,15 +64,18 @@ function PlayerCharacter(startX, startY){
 									   this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
 									   newX,newY,
 									   newX+this.width,newY+this.height);
-			var overlapOutPortalBoolean = this.doRectanglesOverlap(this.outPortal.X,this.outPortal.Y,
+			var overlapOutPortalBoolean = doRectanglesOverlap(this.outPortal.X,this.outPortal.Y,
 									   this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
 									   newX,newY,
 									   newX+this.width,newY+this.height);
 			overlapOutPortal = overlapOutPortalArea>this.width*this.height/2&&overlapOutPortalBoolean;
 			if(overlapOutPortal){
 				if(this.immuneToPortal!=2&&this.inPortal!=null){
-					if(timeIsForward)
+					if(timeIsForward){
 						LoadGameState(this.inPortal.GameState);
+						while(inputStack.length>0&&inputStack[inputStack.length-1][1]!=this.inPortal.GameState.t)
+							inputStack.pop();
+					}
 					this.immuneToPortal = 1;
 					return true;
 				}
@@ -103,7 +106,7 @@ function PlayerCharacter(startX, startY){
 		return true;
 	}
 	this.createOutPortal = function(GameState){
-		if(this.inPortal!=null&&!(this.doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
+		if(this.inPortal!=null&&!(doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
 								  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
 								  this.X,this.Y,
 								  this.X+this.inPortal.width,this.Y+this.inPortal.height))){
@@ -116,12 +119,13 @@ function PlayerCharacter(startX, startY){
 		return false;
 		
 	}
-	this.doRectanglesOverlap = function(p1x1,p1y1,p1x2,p1y2,p2x1,p2y1,p2x2,p2y2){
-		return (p1x1<p2x2&&p1x2>p2x1&&p1y1<p2y2&&p1y2>p2y1);
-	}
 	this.areaOfOverlap = function(p1x1,p1y1,p1x2,p1y2,p2x1,p2y1,p2x2,p2y2){
 		return (Math.max(p1x1,p2x1)-Math.min(p1x2,p2x2))*(Math.max(p1y1,p2y1)-Math.min(p1y2,p2y2));
 	}
+}
+
+function doRectanglesOverlap(p1x1,p1y1,p1x2,p1y2,p2x1,p2y1,p2x2,p2y2){
+		return (p1x1<p2x2&&p1x2>p2x1&&p1y1<p2y2&&p1y2>p2y1);
 }
 
 //This object forms a circular group with PlayerCharacter and GameState. It contains basic information about
@@ -175,19 +179,31 @@ function TestProjectile(startX, startY, xVel, yVel){
 	this.MaxX = canvas.width;
 	this.MaxY = canvas.height;
 	this.color = "#FF0000";
-	this.update = function(t,dt){
+	this.update = function(t,dt,collisionObjects){
 		var newX = this.X+this.XVel*dt;
 		var newY = this.Y+this.YVel*dt;
 		
 		if(newX+this.width>this.MaxX||newX<this.MinX)
 			this.XVel*=-1;
-		else
-			this.X=newX;
-		
 		if(newY+this.height>this.MaxY||newY<this.MinY)
 			this.YVel*=-1;
-		else
-			this.Y=newY;
+			
+		if(collisionObjects.length!=0){
+			for(var i = 0; i < collisionObjects.length;i++){
+				if(doRectanglesOverlap(this.X,this.Y,this.X+this.width,this.Y+this.height,
+									   collisionObjects[i].X,collisionObjects[i].Y,
+									   collisionObjects[i].X+collisionObjects[i].width,collisionObjects[i].Y+collisionObjects[i].height)){
+					if(this.Y+this.height>collisionObjects[i].Y&&this.Y<collisionObjects[i].Y+collisionObjects[i].height){
+						this.YVel*=-1;
+					}
+					if(this.X+this.width>collisionObjects[i].X&&this.X<collisionObjects[i].X+collisionObjects[i].width){
+						this.XVel*=-1;
+					}
+				}
+			}
+		}
+		this.X = this.X+this.XVel*dt;
+		this.Y = this.Y+this.YVel*dt;
 	}
 	this.draw = function(ctx){
 		ctx.fillStyle = this.color;

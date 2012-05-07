@@ -4,6 +4,8 @@ var startTime; //Time offset from start of application (everything absolute time
 var timeTravelOffset; //The amount of time the player has time travelled via portal or continous
 var timeTravelEventStartTime; //The start time of a continuous time travel event (reset to 0 by portal time travel)
 var timeIsForward; //Boolean representing if time is going forward or reverse
+var reverseTimeSpeedMultiplier;
+var continuousTimeTravelStop; //Point before which you cannot time travel continuously
 
 var renderInterval; //Number of ticks we skip to keep a pace
 var maxRenderSkips; //Number of frames we're allowed to skip rendering
@@ -50,10 +52,12 @@ function Initialize(){
 		testObjs[i] = new TestProjectile(Math.random()*canvas.width,Math.random()*canvas.height,Math.random()*10-5,Math.random()*10-5);
 	
 	startTime = (new Date).getTime(); //This is our reference time
+	continuousTimeTravelStop = 0; //We can't travel before time 0
 	timeTravelOffset = 0; //No time travel has happened yet
 	renderInterval = 33; //1000ms/30 ticks per second
 	maxRenderSkips = 5; //This number can be changed to allow more updates between renders (
 	nextRenderTime = 0; //Represents when we're going to render again
+	reverseTimeSpeedMultiplier = 2;
 	
 	GameLoop(); //Start the game!
 }
@@ -83,7 +87,7 @@ function Update(){
 	var dt = 1;
 	if(!timeIsForward) dt*=-1; //If we're going backwards in time flip the time step
 	for(var i = 0; i < numTestObjs; i++) //Update each test object
-		testObjs[i].update(currentTime,dt);
+		testObjs[i].update(currentTime,dt,[pc]);
 }
 
 //Calculates the relative time given the amount we've time travelled total and the reference time
@@ -109,6 +113,8 @@ function GameLoop(){
 		setTimeout(GameLoop,renderInterval); //30ms is approximately 33 fps
 	else if(!timeIsForward) //If we're going backward in time
 	{
+		renderInterval/=reverseTimeSpeedMultiplier;
+		maxRenderSkips/=reverseTimeSpeedMultiplier;
 		//Register the time of the time travel event
 		timeTravelEventStartTime = getCurrentTime();
 		//Start the ReverseGameLoop
@@ -116,21 +122,36 @@ function GameLoop(){
 	}
 }
 
-//The time backwards game loop function, same as forward but with a different current time calculation
+//The time backwards game loop function, similar to forward but with a different current time calculation
 function ReverseGameLoop(){
-	renderSkipsCount = 0; //Reset the loop counter
-	currentTime = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime); //Set the current time
-	while(currentTime<nextRenderTime&&renderSkipsCount<maxRenderSkips){
-		Update();
-		
-		nextRenderTime-=renderInterval;
-		renderSkipsCount++;
+	currentTime = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime);
+	if(currentTime-renderInterval>continuousTimeTravelStop){
+		renderSkipsCount = 0; //Reset the loop counter
+		currentTime = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime); //Set the current time
+		while(currentTime<nextRenderTime&&renderSkipsCount<maxRenderSkips){
+			Update();
+			while(inputStack.length>0&&inputStack[inputStack.length-1][1]>nextRenderTime){
+				var eventToProcess = inputStack.pop();
+				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
+					pc.move(-eventToProcess[2],-eventToProcess[3]);
+				}
+				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
+					jQuery.extend(true, pc, eventToProcess[2].pc);
+				}
+			}
+			nextRenderTime-=renderInterval;
+			renderSkipsCount++;
+		}
 	}
-	
+	else{ //If we've hit the stop time, copy the stop state and adjust the offset
+		timeTravelOffset+=(-currentTime);
+	}
 	currentTime = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime);
 	Draw();
 	if(timeIsForward){
 		timeTravelOffset += (timeTravelEventStartTime-currentTime)*2; //This is times two because when you're continuously time travelling backwards, time is still passing forwards
+		renderInterval*=reverseTimeSpeedMultiplier;
+		maxRenderSkips*=reverseTimeSpeedMultiplier;
 		setTimeout(GameLoop,renderInterval);
 	}
 	else if(!timeIsForward){
