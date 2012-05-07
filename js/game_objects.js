@@ -75,14 +75,8 @@ function PlayerCharacter(startX, startY, startColor){
 			overlapOutPortal = overlapOutPortalArea>this.width*this.height/2&&overlapOutPortalBoolean;
 			if(overlapOutPortal){
 				if(this.immuneToPortal!=2&&this.inPortal!=null){
-					if(timeIsForward){
+					if(timeIsForward)
 						LoadGameState(this.inPortal.GameState);
-						pcGhost = new PlayerCharacter(this.X,this.Y,"#F000F0");
-						while(inputStack.length>0&&inputStack[inputStack.length-1][1]!=this.inPortal.GameState.t){
-							pcGhostInputStack.push(inputStack.pop());
-						}
-						pcGhostInputStackPointer = pcGhostInputStack.length-1;
-					}
 					this.immuneToPortal = 1;
 					return true;
 				}
