@@ -1,21 +1,21 @@
 window.onload = Initialize; //When we load the window, call the Initialize function
 
 var startTime; //Time offset from start of application (everything absolute time variable references to this)
+var currentTime; //Current simulation time
 var timeTravelOffset; //The amount of time the player has time travelled via portal or continous
 var timeTravelEventStartTime; //The start time of a continuous time travel event (reset to 0 by portal time travel)
 var timeIsForward; //Boolean representing if time is going forward or reverse
 
 var renderInterval; //Number of ticks we skip to keep a pace
-var maxRenderSkips; //Number of frames we're allowed to skip rendering
-	
+var maxRenderSkips; //Number of frames we're allowed to skip rendering	
 var nextRenderTime; //Next render tick
 var renderSkipsCount; //Number of times we update before rendering for given iteration
-var currentTime; //Current simulation time
 var updateCount;
 
 var canvas; //The primary canvas element (the space where things are rendered)
 var context; //The primary context element (for drawing)
-//var hasBeenDragged; //Boolean representing if the window has been dragged (prevents auto-centering on window resize when true)
+var debugConsole;
+var debugStack;
 
 var keyStates; //Boolean array representing the state of the keyboard
 
@@ -24,36 +24,31 @@ var testObjs; //Array of deterministic objects with time-stepped update function
 var numTestObjs; //Number of object to be populated into the testObjs array on initialization
 
 var inputStack; //The stack containing all user actions
-var pcGhost;
-var pcGhostInputStack;
-var pcGhostInputStackPointer;
-
-var debugConsole;
-var debugStack;
 
 //This function initializes all the game variables and starts the game loop.
 function Initialize(){
-	debugConsole = document.getElementById("debugConsole");
+	var body = document.getElementsByTagName('body')[0];
+	
+	debugConsole = document.createElement('div');
+	debugConsole.setAttribute('id','debugConsole');
 	debugConsole.setAttribute('style','overflow:scroll;color:white;font-size:10px;position:absolute;top:0px;left:0px;border:1px solid white;width:'+(window.innerWidth/5-2)+'px;height:'+(window.innerHeight-2)+'px;');
+	
 	debugStack = document.createElement('ol');
 	debugConsole.appendChild(debugStack);
-	timeIsForward = true; //We go forward in time by default
-	canvas = document.getElementById("mainCanvas")
+	
+	body.appendChild(debugConsole);
+	
+	canvas = document.createElement('canvas');
+	canvas.setAttribute('id','mainCanvas');
 	canvas.setAttribute('style','position:absolute;top:0px;left:'+(window.innerWidth/5)+'px;');
 	canvas.width = window.innerWidth*4/5;
 	canvas.height = window.innerHeight;
-	//canvas.ondrag = CanvasDragEvent; //Drag event for the canvas
-	context = canvas.getContext("2d");
-	//hasBeenDragged = false; //Canvas hasn't been dragged by default
-	keyStates = new Array();
 	
-	////Canvas position is fixed and centered
-	//canvas.style.position = "fixed";
-	//canvas.style.top = (window.innerHeight-canvas.height)/2;
-	//canvas.style.left = (window.innerWidth-canvas.width)/2;
-
-	pcGhost = null;
-	pcGhostInputStack = new Array();
+	body.appendChild(canvas);
+	
+	context = canvas.getContext("2d");
+	
+	keyStates = new Array();
 	
 	inputStack = new Array();
 	
@@ -66,18 +61,17 @@ function Initialize(){
 	for(var i = 0; i < numTestObjs; i++) //Random position in the canvas and random velocity between -5 and 5
 		testObjs[i] = new TestProjectile(Math.round(Math.random()*canvas.width),Math.round(Math.random()*canvas.height),Math.round(Math.random()*10-5),Math.round(Math.random()*10-5));
 	
-	updateCount=0;
+	timeIsForward = true; //We go forward in time by default
 	startTime = (new Date).getTime(); //This is our reference time
 	continuousTimeTravelStop = 0; //We can't travel before time 0
 	timeTravelOffset = 0; //No time travel has happened yet
+	
 	renderInterval = 33; //1000ms/30 ticks per second
 	maxRenderSkips = 5; //This number can be changed to allow more updates between renders (
 	nextRenderTime = 0; //Represents when we're going to render again
-	
-	//InitiatlizeReportCanvas();
+	updateCount = 0;
 	
 	GameLoop(); //Start the game!
-	//ReportCanvasLoop();
 }
 
 function Draw(){
@@ -94,10 +88,6 @@ function Draw(){
 	//Draw the player
 	pc.draw(context);
 	
-	if(pcGhost!=null){
-		pcGhost.draw(context);
-	}
-	
 	//Overlay some stats
 	context.fillStyle = "#FFFFFF";
 	context.fillText("Current Time: "+ currentTime,10,10);
@@ -106,47 +96,20 @@ function Draw(){
 //The Update function takes a time step and updates the positions of the objects as well as the player.
 function Update(dt){
 	if(updateCount==0&&dt<0) return;
-	if(dt>0) updateCount++;
-	else if(dt<0) updateCount--;
-	HandleKeyEvents(); //First handle any user input
+	
+	if(dt>0){
+		updateCount++;
+		HandleKeyEvents(); //First handle any user input
+	}
+	else if(dt<0){
+		if(updateCount==0)
+			return;
+		else
+			updateCount--;
+	}
+	
 	for(var i = 0; i < numTestObjs; i++) //Update each test object
 		testObjs[i].update(currentTime,dt,[pc]);
-	if(pcGhost!=null){
-		if(timeIsForward){
-			pcGhost.color = "#F000F0";
-			while(pcGhostInputStackPointer>0&&pcGhostInputStackPointer<pcGhostInputStack.length&&pcGhostInputStack[pcGhostInputStackPointer][1]<nextRenderTime){
-				var eventToProcess = pcGhostInputStack[pcGhostInputStackPointer];
-				pcGhostInputStackPointer--;
-				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
-					pcGhost.move(eventToProcess[2],eventToProcess[3]);
-				}
-				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
-					jQuery.extend(true, pcGhost, eventToProcess[2].pc);
-				}
-			}
-		}
-		else if(!timeIsForward){
-			pcGhost.color = "#F000F0";
-			while(pcGhostInputStackPointer>0&&pcGhostInputStackPointer<pcGhostInputStack.length&&pcGhostInputStack[pcGhostInputStackPointer][1]>nextRenderTime){
-				var eventToProcess = pcGhostInputStack[pcGhostInputStackPointer];
-				pcGhostInputStackPointer++;
-				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
-					pcGhost.move(-eventToProcess[2],-eventToProcess[3]);
-				}
-				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
-					jQuery.extend(true, pcGhost, eventToProcess[2].pc);
-				}
-			}
-		}
-		if(pcGhostInputStackPointer<0){
-			pcGhost.visible = false;
-			pcGhostInputStackPointer = 0;
-		}
-		else if(pcGhostInputStackPointer>pcGhostInputStack.length){
-			pcGhost.visible = false;
-			pcGhostInputStackPointer = pcGhostInputStack.length-1;
-		}
-	}
 }
 
 //Calculates the relative time given the amount we've time travelled total and the reference time
@@ -217,8 +180,9 @@ function ReverseGameLoop(){
 		setTimeout(ReverseGameLoop,renderInterval);
 	}
 }
+
 function printInputStack(movementEventType,currentTime,dx,dy){
-	var output = "<li class='userStackItem'>";
+	var output = "";
 	if(movementEventType==InputStackEventType.PlayerMovementEvent)
 		output+="move(";
 	else if(movementEventType==InputStackEventType.PlayerActionEvent)
@@ -232,6 +196,7 @@ function printInputStack(movementEventType,currentTime,dx,dy){
 	outputElement.innerHTML = output;
 	debugStack.appendChild(outputElement);
 }
+
 function removeLinePrintUserInputStack(){
 	var removeElement = debugStack.childNodes[debugStack.childNodes.length-1];
 	debugStack.removeChild(removeElement);
