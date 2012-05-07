@@ -1,0 +1,124 @@
+<html>
+<head>
+
+<title>JQuery.extend Test</title>
+
+<script type="text/javascript" src="jquery-1.7.2.min.js"></script>
+
+<script type="text/javascript">
+
+function SimpleObject(test_scalar){
+	this.t_scalar = test_scalar;
+	this.ToString = function(){
+		return "S: " + this.t_scalar;
+	}
+}
+
+function TestObject(test_scalar,test_array,test_object){
+	this.t_scalar = test_scalar;
+	this.t_array = test_array;
+	this.t_object = test_object;
+	this.ToString = function(){
+		var returnVal = "S: " + this.t_scalar + ",A: [";
+		var i;
+		for(i = 0; i < this.t_array.length-1; i++)
+			returnVal += this.t_array[i] + ",";
+		returnVal += this.t_array[i] + "], O: {"
+		returnVal += this.t_object.ToString() + "}";
+		return returnVal;
+	}
+}
+
+function Console(id){
+	this.console = document.getElementById(id);
+	this.write = function(str){
+		if(str!=undefined)
+			this.console.appendChild(document.createTextNode(str));
+	}
+	this.writeline = function(str){
+		if(str!=undefined)
+			this.console.appendChild(document.createTextNode(str));
+		this.console.appendChild(document.createElement('br'));
+	}
+}
+
+function runTest(){
+	var out = new Console('console');
+	
+	var t0 = new TestObject(3.14,new Array(3,1,4,1,5,9,2),new TestObject(1.61,new Array(1,6,1,8,0,3,3),new SimpleObject(2)));
+	
+	out.writeline("Original Values");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline();
+	
+	t0.t_scalar = 1; //works fine!
+	out.writeline("Level 1 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline();
+	
+	t0.t_object.t_scalar = 23; //works fine!
+	out.writeline("Level 2 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline();
+	
+	t0.t_object.t_object.t_scalar = 42; //works fine!
+	out.writeline("Level 3 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline();
+	
+	var t1 = jQuery.extend(false,{},t0);
+	out.writeline("Shallow Copy");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t1 - " + t1.ToString()+";");
+	out.writeline();
+	
+	t1.t_scalar = 2; //works fine!
+	out.writeline("Level 1 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t1 - " + t1.ToString()+";");
+	out.writeline();
+	
+	t1.t_object.t_scalar = 24; //modifies both (as expected)!
+	out.writeline("Level 2 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t1 - " + t1.ToString()+";");
+	out.writeline();
+	
+	t1.t_object.t_object.t_scalar = 43; //modifies both (as expected)!
+	out.writeline("Level 3 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t1 - " + t1.ToString()+";");
+	out.writeline();
+	
+	var t2 = jQuery.extend(true,{},t0);
+	out.writeline("Deep Copy");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t2 - " + t2.ToString()+";");
+	out.writeline();
+	
+	t2.t_scalar = 3; //works fine!
+	out.writeline("Level 1 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t2 - " + t2.ToString()+";");
+	out.writeline();
+	
+	t2.t_object.t_scalar = 25; //modifies both (unexpected)!
+	out.writeline("Level 2 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t2 - " + t2.ToString()+";");
+	out.writeline();
+	
+	t2.t_object.t_object.t_scalar = 44; //modifies both (unexpected)!
+	out.writeline("Level 3 Change");
+	out.writeline("t0 - " + t0.ToString()+";");
+	out.writeline("t2 - " + t2.ToString()+";");
+	out.writeline();
+}
+
+</script>
+
+</head>
+<body bgcolor="#000000" onload='runTest();'>
+<div id='console' style='color:#FFFFFF;'></div>
+</body>
+</html>

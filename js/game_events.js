@@ -10,9 +10,8 @@ var InputStackEventType = { PlayerMovementEvent:0, PlayerActionEvent:1 };
 //time travel requests (this is performed via a "dead man's switch" which must be held to continue travelling
 //back in time). It blocks the keyboard events from being passed along to the browser.
 function KeyDownEvent(e){
-	if(e.keyCode==192){ //	`/~ Key
+	if(e.keyCode==192) //	`/~ Key
 		timeIsForward = false;
-	}
 	keyStates[e.keyCode] = true;
 	if(e.keyCode==17||e.keyCode==82) return true;
 	return false;
@@ -21,9 +20,8 @@ function KeyDownEvent(e){
 //This function handles the key being released. It modifies the keyStates array and watches for the release
 //of the continuous time travel request. It blocks the keyboard events from being passed along to the browser.
 function KeyUpEvent(e){
-	if(e.keyCode==192){ //	`/~ Key
+	if(e.keyCode==192) //	`/~ Key
 		timeIsForward = true;
-	}
 	keyStates[e.keyCode] = false;
 	return false;
 }
@@ -83,16 +81,24 @@ function HandleKeyEvents(){
 		var stateObjectArray = new Array();
 		for(var i = 0; i < testObjs.length;i++)
 			stateObjectArray[i] = jQuery.extend(true,{},testObjs[i]);
+			
 		var previousStatePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
 		jQuery.extend(true,previousStatePlayerCharacter,pc);
+		
 		var inputStackClone = new Array();
 		jQuery.extend(true,inputStackClone,inputStack);
+		
 		var gs0 = new GameState(currentTime,updateCount,previousStatePlayerCharacter,stateObjectArray,inputStackClone);
+		
 		var statePlayerCharacter = new PlayerCharacter(pc.X,pc.Y);
 		jQuery.extend(true,statePlayerCharacter,pc);
+		
 		var gs = new GameState(currentTime,updateCount,statePlayerCharacter,stateObjectArray,inputStackClone);
+		
 		statePlayerCharacter.createInPortal(gs);
+		
 		pc.createOutPortal(gs);
+		
 		inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
 		printInputStack(InputStackEventType.PlayerActionEvent,currentTime,'portal','out');
 	}
