@@ -5,13 +5,12 @@ var timeTravelOffset; //The amount of time the player has time travelled via por
 var timeTravelEventStartTime; //The start time of a continuous time travel event (reset to 0 by portal time travel)
 var timeIsForward; //Boolean representing if time is going forward or reverse
 
-var skip_ticks; //Number of ticks we skip to keep a pace
-var max_frameskip; //Number of frames we're allowed to skip rendering
+var renderInterval; //Number of ticks we skip to keep a pace
+var maxRenderSkips; //Number of frames we're allowed to skip rendering
 	
-var next_game_tick; //Next render tick
-var loops; //Number of times we update before rendering for given iteration
-var current_time; //Current simulation time
-var previous_time; //The time from the previous iteration
+var nextRenderTime; //Next render tick
+var renderSkipsCount; //Number of times we update before rendering for given iteration
+var currentTime; //Current simulation time
 
 var canvas; //The primary canvas element (the space where things are rendered)
 var context; //The primary context element (for drawing)
@@ -52,9 +51,9 @@ function Initialize(){
 	
 	startTime = (new Date).getTime(); //This is our reference time
 	timeTravelOffset = 0; //No time travel has happened yet
-	skip_ticks = 33; //1000ms/30 ticks per second
-	max_frameskip = 5; //This number can be changed to allow more updates between renders (
-	next_game_tick = 0; //Represents when we're going to render again
+	renderInterval = 33; //1000ms/30 ticks per second
+	maxRenderSkips = 5; //This number can be changed to allow more updates between renders (
+	nextRenderTime = 0; //Represents when we're going to render again
 	
 	GameLoop(); //Start the game!
 }
@@ -75,7 +74,7 @@ function Draw(){
 	
 	//Overlay some stats
 	context.fillStyle = "#FFFFFF";
-	context.fillText("Current Time: "+ current_time + ",Time Travel Offset: " + timeTravelOffset + ", Updates per Render: " + loops,10,10);
+	context.fillText("Current Time: "+ currentTime + ",Time Travel Offset: " + timeTravelOffset + ", Updates per Render: " + renderSkipsCount,10,10);
 }
 
 //The Update function takes a time step and updates the positions of the objects as well as the player.
@@ -84,60 +83,57 @@ function Update(){
 	var dt = 1;
 	if(!timeIsForward) dt*=-1; //If we're going backwards in time flip the time step
 	for(var i = 0; i < numTestObjs; i++) //Update each test object
-		testObjs[i].update(current_time,dt);
+		testObjs[i].update(currentTime,dt);
 }
 
 //Calculates the relative time given the amount we've time travelled total and the reference time
 function getCurrentTime(){
-	return (new Date).getTime()-startTime-timeTravelOffset*2;
+	return (new Date).getTime()-startTime-timeTravelOffset;
 }
 
 //The time forward game loop function
 function GameLoop(){
-	loops = 0; //Reset the loop counter
-	current_time = getCurrentTime(); //Set the current time to our relative time
+	renderSkipsCount = 0; //Reset the loop counter
+	currentTime = getCurrentTime(); //Set the current time to our relative time
 	
-	while(current_time>next_game_tick&&loops<max_frameskip){ //Loop until the next tick or the maximum number of frames
+	while(currentTime>nextRenderTime&&renderSkipsCount<maxRenderSkips){ //Loop until the next tick or the maximum number of frames
 		Update(); //Update the game state
-		
-		next_game_tick+=skip_ticks; //Iterate forward
-		loops++; //Iterate loops
+		nextRenderTime+=renderInterval;
+		renderSkipsCount++; //Iterate renderSkipsCount
 	}
 	
-	current_time = getCurrentTime(); //Update the current time to our relative time
+	currentTime = getCurrentTime(); //Update the current time to our relative time
 	
 	Draw(); //Render the scene
 	if(timeIsForward) //If we're going forward in time, repeat the GameLoop
-		setTimeout(GameLoop,skip_ticks); //30ms is approximately 33 fps
+		setTimeout(GameLoop,renderInterval); //30ms is approximately 33 fps
 	else if(!timeIsForward) //If we're going backward in time
 	{
 		//Register the time of the time travel event
 		timeTravelEventStartTime = getCurrentTime();
-		//Set the previous time
-		previous_time = timeTravelEventStartTime;
 		//Start the ReverseGameLoop
-		setTimeout(ReverseGameLoop,skip_ticks);
+		setTimeout(ReverseGameLoop,renderInterval);
 	}
 }
 
 //The time backwards game loop function, same as forward but with a different current time calculation
 function ReverseGameLoop(){
-	loops = 0; //Reset the loop counter
-	current_time = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime); //Set the current time
-	while(current_time<next_game_tick&&loops<max_frameskip){
+	renderSkipsCount = 0; //Reset the loop counter
+	currentTime = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime); //Set the current time
+	while(currentTime<nextRenderTime&&renderSkipsCount<maxRenderSkips){
 		Update();
 		
-		next_game_tick-=skip_ticks;
-		loops++;
+		nextRenderTime-=renderInterval;
+		renderSkipsCount++;
 	}
 	
-	current_time = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime);
+	currentTime = timeTravelEventStartTime-(getCurrentTime()-timeTravelEventStartTime);
 	Draw();
 	if(timeIsForward){
-		timeTravelOffset += timeTravelEventStartTime-current_time;
-		setTimeout(GameLoop,30);
+		timeTravelOffset += (timeTravelEventStartTime-currentTime)*2; //This is times two because when you're continuously time travelling backwards, time is still passing forwards
+		setTimeout(GameLoop,renderInterval);
 	}
 	else if(!timeIsForward){
-		setTimeout(ReverseGameLoop,30);
+		setTimeout(ReverseGameLoop,renderInterval);
 	}
 }

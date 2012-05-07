@@ -32,28 +32,28 @@ function HandleKeyEvents(t){
 		if(pc.X+dx<0) dx=0;
 		var dy = 0;
 		pc.move(dx,dy);
-		inputStack.push([current_time,dx,dy]);
+		inputStack.push([currentTime,dx,dy]);
 	}
 	if(keyStates[38]){ //Up Key
 		var dx = 0;
 		var dy = -pc.SuggestedYVel;
 		if(pc.Y+dy<0) dy=0;
 		pc.move(dx,dy);
-		inputStack.push([current_time,dx,dy]);
+		inputStack.push([currentTime,dx,dy]);
 	}
 	if(keyStates[39]){ //Right Key
 		var dx = pc.SuggestedXVel;
 		if(pc.X+dx+pc.width>canvas.width) dx=0;
 		var dy = 0;
 		pc.move(dx,dy);
-		inputStack.push([current_time,dx,dy]);
+		inputStack.push([currentTime,dx,dy]);
 	}
 	if(keyStates[40]){ //Down Key
 		var dx = 0;
 		var dy = pc.SuggestedYVel;
 		if(pc.Y+dy+pc.height>canvas.height) dy=0;
 		pc.move(dx,dy);
-		inputStack.push([current_time,dx,dy]);
+		inputStack.push([currentTime,dx,dy]);
 	}
 	if(keyStates[49]){ //1 key
 		var tmpArray = new Array();
@@ -61,7 +61,7 @@ function HandleKeyEvents(t){
 			tmpArray[i] = jQuery.extend(true,{},testObjs[i]);
 		var tmpObj = new PlayerCharacter(pc.X,pc.Y);
 		jQuery.extend(true,tmpObj,pc);
-		var gs = new GameState(current_time,tmpObj,tmpArray);
+		var gs = new GameState(currentTime,tmpObj,tmpArray);
 		tmpObj.createInPortal(gs);
 		pc.createInPortal(gs);
 		inputStack.push([gs]);
@@ -72,7 +72,7 @@ function HandleKeyEvents(t){
 			tmpArray[i] = jQuery.extend(true,{},testObjs[i]);
 		var tmpObj = new PlayerCharacter(pc.X,pc.Y);
 		jQuery.extend(true,tmpObj,pc);
-		var gs = new GameState(current_time,tmpObj,tmpArray);
+		var gs = new GameState(currentTime,tmpObj,tmpArray);
 		tmpObj.createInPortal(gs);
 		pc.createOutPortal(gs);
 		inputStack.push([gs]);
@@ -90,7 +90,7 @@ function WindowResizeEvent(){
 //This function makes sure the simulation time is not interrupted by losing focus on the window.
 //Without this function, the game would play catchup every time you left the tab and came back (very annoying).
 function OnFocusEvent(){
-	next_game_tick = getCurrentTime();
+	nextRenderTime = getCurrentTime();
 }
 
 //This function watches for if the canvas is dragged and sets a flag saying it has which prevents it from being

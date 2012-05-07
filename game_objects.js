@@ -9,15 +9,11 @@ function GameState(Time, Player, Objects){
 //Function which loads a game state, adjusts the appropriate timers to allow for state to be loaded while
 //travelling forward or backwards in time.
 function LoadGameState(GameState){
-	if(!timeIsForward)
-		timeTravelOffset += (timeTravelEventStartTime-current_time)/4; //TODO: This line is wrong and causes strange relative offsets when going through a portal while traveling back in time
 	jQuery.extend(true,pc,GameState.pc);
 	jQuery.extend(true,testObjs,GameState.objList);
-	timeTravelOffset+=(current_time-GameState.t)/2;
-	current_time = getCurrentTime();
-	if(!timeIsForward)
-		timeTravelEventStartTime = current_time;
-	next_game_tick = current_time+1;
+	timeTravelOffset+=(currentTime-GameState.t);
+	currentTime = getCurrentTime();
+	nextRenderTime = currentTime+1;
 }
 
 //Object which represents the player
@@ -75,10 +71,8 @@ function PlayerCharacter(startX, startY){
 			overlapOutPortal = overlapOutPortalArea>this.width*this.height/2&&overlapOutPortalBoolean;
 			if(overlapOutPortal){
 				if(this.immuneToPortal!=2&&this.inPortal!=null){
-					if(!timeIsForward){
-						timeTravelOffset+=timeTravelEventStartTime-current_time;
-					}
-					LoadGameState(this.inPortal.GameState);
+					if(timeIsForward)
+						LoadGameState(this.inPortal.GameState);
 					this.immuneToPortal = 1;
 					return true;
 				}
