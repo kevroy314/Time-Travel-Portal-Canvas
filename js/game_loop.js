@@ -2,7 +2,7 @@ window.onload = Initialize; //When we load the window, call the Initialize funct
 
 var startTime; //Time offset from start of application (everything absolute time variable references to this)
 var currentTime; //Current simulation time
-var timeTravelOffset; //The amount of time the player has time travelled via portal or continous
+var timeTravelCumulative; //The amount of time the player has time travelled via portal or continous
 var timeTravelEventStartTime; //The start time of a continuous time travel event (reset to 0 by portal time travel)
 var timeIsForward; //Boolean representing if time is going forward or reverse
 
@@ -20,10 +20,8 @@ var debugStack;
 var keyStates; //Boolean array representing the state of the keyboard
 
 var pc; //PlayerCharacter object representing the player (forms circular chain with Portal and GameState objects
-var testObjs; //Array of deterministic objects with time-stepped update function
+var projectiles; //Array of deterministic objects with time-stepped update function
 var numTestObjs; //Number of object to be populated into the testObjs array on initialization
-
-var inputStack; //The stack containing all user actions
 
 //This function initializes all the game variables and starts the game loop.
 function Initialize(){
@@ -50,21 +48,17 @@ function Initialize(){
 	
 	keyStates = new Array();
 	
-	inputStack = new Array();
-	
 	pc = new PlayerCharacter(canvas.width/2,canvas.height/2, "#FFFFFF"); //Player starts in the middle
 	pc.X-=pc.width/2;
 	pc.Y-=pc.height/2;
 	
-	testObjs = new Array();
-	numTestObjs = 25; //Number of test objects to be populated at the beginning
-	for(var i = 0; i < numTestObjs; i++) //Random position in the canvas and random velocity between -5 and 5
-		testObjs[i] = new TestProjectile(Math.round(Math.random()*canvas.width),Math.round(Math.random()*canvas.height),Math.round(Math.random()*10-5),Math.round(Math.random()*10-5));
+	testObjs = new ProjectileManager();
+	testObjs.randomize(25,0,0,canvas.width,canvas.height,-5,-5,5,5);
 	
 	timeIsForward = true; //We go forward in time by default
 	startTime = (new Date).getTime(); //This is our reference time
 	continuousTimeTravelStop = 0; //We can't travel before time 0
-	timeTravelOffset = 0; //No time travel has happened yet
+	timeTravelCumulative = 0; //No time travel has happened yet
 	
 	renderInterval = 33; //1000ms/30 ticks per second
 	maxRenderSkips = 5; //This number can be changed to allow more updates between renders (
@@ -82,8 +76,7 @@ function Draw(){
 	context.strokeRect(0,0,canvas.width,canvas.height);
 	
 	//Draw the test objects
-	for(var i = 0; i < numTestObjs; i++)
-		testObjs[i].draw(context);
+	testObjs.draw(context);
 	
 	//Draw the player
 	pc.draw(context);
@@ -107,9 +100,7 @@ function Update(dt){
 		else
 			updateCount--;
 	}
-	
-	for(var i = 0; i < numTestObjs; i++) //Update each test object
-		testObjs[i].update(currentTime,dt,[pc]);
+	testObjs.update(currentTime,dt,[pc]);
 }
 
 //Calculates the relative time given the amount we've time travelled total and the reference time
@@ -117,7 +108,7 @@ function getCurrentTime(){
 	return (new Date).getTime()-startTime;
 }
 function getTimeTravelAdjustedTime(){
-	return getCurrentTime() - timeTravelOffset;
+	return getCurrentTime() - timeTravelCumulative;
 }
 //The time forward game loop function
 function GameLoop(){
@@ -151,14 +142,14 @@ function ReverseGameLoop(){
 		currentTime = timeTravelEventStartTime-(getTimeTravelAdjustedTime()-timeTravelEventStartTime); //Set the current time
 		while(currentTime<nextRenderTime&&renderSkipsCount<maxRenderSkips){
 			Update(-1);
-			while(inputStack.length>0&&inputStack[inputStack.length-1][1]>nextRenderTime){
-				var eventToProcess = inputStack.pop();
+			while(pc.inputStack.length>0&&pc.inputStack[pc.inputStack.length-1][1]>nextRenderTime){
+				var eventToProcess = pc.inputStack.pop();
 				removeLinePrintUserInputStack();
 				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
 					pc.move(-eventToProcess[2],-eventToProcess[3]);
 				}
 				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
-					jQuery.extend(true, pc, eventToProcess[2].pc);
+					pc = eventToProcess[2].pc.clone();
 				}
 			}
 			nextRenderTime-=renderInterval;
@@ -166,12 +157,12 @@ function ReverseGameLoop(){
 		}
 	}
 	else{ //If we've hit the stop time, copy the stop state and adjust the offset
-		timeTravelOffset+=(-currentTime);
+		timeTravelCumulative+=(-currentTime);
 	}
 	currentTime = timeTravelEventStartTime-(getTimeTravelAdjustedTime()-timeTravelEventStartTime);
 	Draw();
 	if(timeIsForward){
-		timeTravelOffset += (timeTravelEventStartTime-currentTime)*2; //This is times two because when you're continuously time travelling backwards, time is still passing forwards
+		timeTravelCumulative += (timeTravelEventStartTime-currentTime)*2; //This is times two because when you're continuously time travelling backwards, time is still passing forwards
 		nextRenderTime = currentTime+1;
 		Update(-1);
 		setTimeout(GameLoop,renderInterval);
