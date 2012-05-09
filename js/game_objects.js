@@ -11,7 +11,7 @@ function GameState(currentTime, currentUpdateCount, currentPlayerState, currentO
 			clonedGameState.pc = this.pc.clone(); //WARNING: IF PC IS SELF REFERENTIAL THIS WILL CAUSE AN INFINITE LOOP!
 		if(this.objList!=null)
 			clonedGameState.objList = this.objList.clone();
-		clonedGameState.t = this.currentTime;
+		clonedGameState.t = this.t;
 		clonedGameState.updateCount = this.updateCount;
 		return clonedGameState;
 	}
@@ -22,8 +22,8 @@ function GameState(currentTime, currentUpdateCount, currentPlayerState, currentO
 function LoadGameState(GameState){
 	if(GameState.pc!=null)
 		pc = GameState.pc.clone(); //Load the player state
-	if(GameState.testObjs!=null)
-		testObjs = GameState.testObjs.clone(); //Clone the test objects
+	if(GameState.objList!=null)
+		testObjs = GameState.objList.clone(); //Clone the test objects
 	updateCount = GameState.updateCount; //Load the update count
 	timeTravelCumulative+=(currentTime-GameState.t); //Adjust the cumulative time travel amount relative to the game state
 	currentTime = getTimeTravelAdjustedTime(); //Set a new current time relative to the amount time travelled
@@ -42,6 +42,7 @@ function LoadGameState(GameState){
 //It has two helper functions which help determine if (and how much) a rectangle overlaps with another rectangle.
 //The function tracks portal immunity for both portals allowing bi-directional travel at if required later.
 var InputStackEventType = { PlayerMovementEvent:0, PlayerActionEvent:1 };
+var PortalImmunityType = { NoPortalImmunity:0, InPortalImmunity:1, OutPortalImmunity:2 };
 function PlayerCharacter(startX, startY, startColor){
 	this.X = startX;
 	this.Y = startY;
@@ -54,49 +55,59 @@ function PlayerCharacter(startX, startY, startColor){
 	this.outPortal = null;
 	this.visible = true;
 	this.inputStack = new Array(); //The stack containing all user actions
+	this.inPortalColor = "#0000FF";
+	this.outPortalColor = "#FF0000";
+	this.immuneToPortal = PortalImmunityType.NoPortalImmunity;
 	this.move = function(XVel,YVel){ //FLAG
 		var newX = this.X+XVel;
 		var newY = this.Y+YVel;
-		var overlapInPortal = null;
-		var overlapOutPortal = null;
-		if(this.inPortal!=null){
-			var overlapInPortalArea = this.areaOfOverlap(this.inPortal.X,this.inPortal.Y,
-									  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
-									  newX,newY,
-									  newX+this.width,newY+this.height);
-			var overlapInPortalBoolean = doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
-									  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
-									  newX,newY,
-									  newX+this.width,newY+this.height);
-			overlapInPortal = overlapInPortalArea>this.width*this.height/2&&overlapInPortalBoolean;
-			if(overlapInPortal){
-				if(this.immuneToPortal!=1&&this.outPortal!=null){
-					this.immuneToPortal = 2;
-					return true;
-				}
+		var playerOverlapsInPortal = null;
+		var playerOverlapsOutPortal = null;
+		if(this.inPortal!=null){ //If there is an in portal
+			//Compute boolean representing if they actually overlap at all
+			playerOverlapsInPortal = doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
+				this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
+				newX,newY,
+				newX+this.width,newY+this.height);
+			if(playerOverlapsInPortal){
+				//Compute the area of the overlap with the player (only works if overlapping)
+				var overlapInPortalArea = this.areaOfOverlap(this.inPortal.X,this.inPortal.Y,
+					this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
+					newX,newY,
+					newX+this.width,newY+this.height);
+				//The area is more than half overlapped
+				playerOverlapsInPortal = overlapInPortalArea>this.width*this.height/2;
+			}
+			if(playerOverlapsInPortal&&this.immuneToPortal!=PortalImmunityType.InPortalImmunity&&this.outPortal!=null){
+				this.immuneToPortal = PortalImmunityType.OutPortalImmunity; //Make the character immune to the out portal
+				return true;
 			}
 		}
-		if(this.outPortal!=null){
-			var overlapOutPortalArea = this.areaOfOverlap(this.outPortal.X,this.outPortal.Y,
-									   this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
-									   newX,newY,
-									   newX+this.width,newY+this.height);
-			var overlapOutPortalBoolean = doRectanglesOverlap(this.outPortal.X,this.outPortal.Y,
-									   this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
-									   newX,newY,
-									   newX+this.width,newY+this.height);
-			overlapOutPortal = overlapOutPortalArea>this.width*this.height/2&&overlapOutPortalBoolean;
-			if(overlapOutPortal){
-				if(this.immuneToPortal!=2&&this.inPortal!=null){
-					if(timeIsForward)
-						LoadGameState(this.inPortal.GameState);
-					this.immuneToPortal = 1;
+		if(this.outPortal!=null){ //Also, if there is an out portal
+			//Compute boolean representing if they actually overlap at all
+			playerOverlapsOutPortal = doRectanglesOverlap(this.outPortal.X,this.outPortal.Y,
+					this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
+					newX,newY,
+					newX+this.width,newY+this.height);
+			
+			if(playerOverlapsOutPortal){
+				//Compute the area of the overlap with the player (only works if overlapping)
+				var overlapOutPortalArea = this.areaOfOverlap(this.outPortal.X,this.outPortal.Y,
+				this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
+				newX,newY,
+				newX+this.width,newY+this.height);
+				//The area is more than half overlapped
+				playerOverlapsOutPortal = overlapOutPortalArea>this.width*this.height/2;
+			}
+			if(playerOverlapsOutPortal&&this.immuneToPortal!=PortalImmunityType.OutPortalImmunity&&this.inPortal!=null){
+					if(timeIsForward) //If we're going forward in time
+						LoadGameState(this.inPortal.GameState); //TIME TRAVEL!
+					this.immuneToPortal = PortalImmunityType.InPortalImmunity; //Set immunity to the in portal
 					return true;
-				}
 			}
 		}
-		if((this.immuneToPortal==1&&!overlapInPortal)||(this.immuneToPortal==2&&!overlapOutPortal))
-			this.immuneToPortal = 0;
+		if((this.immuneToPortal==PortalImmunityType.InPortalImmunity&&!playerOverlapsInPortal)||(this.immuneToPortal==2&&!playerOverlapsOutPortal)) //If the player is immune to a portal and not overlapping it, remove it's immunity
+			this.immuneToPortal = PortalImmunityType.NoPortalImmunity;
 		this.X = newX;
 		this.Y = newY;
 		return false;
@@ -115,25 +126,24 @@ function PlayerCharacter(startX, startY, startColor){
 	}
 	this.createInPortal = function(GameState){
 		this.outPortal = null;
-		this.inPortal = new Portal(GameState,this.X,this.Y,"#0000FF");
-		this.inPortal.X = this.inPortal.X-this.inPortal.width/2+this.width/2;
-		this.inPortal.Y = this.inPortal.Y-this.inPortal.height/2+this.height/2;
-		this.immuneToPortal = 1;
+		this.inPortal = new Portal(GameState,this.X,this.Y,this.inPortalColor);
+		this.inPortal.X = this.inPortal.X-this.inPortal.width/2+this.width/2; //adjust to center
+		this.inPortal.Y = this.inPortal.Y-this.inPortal.height/2+this.height/2; //adjust to center
+		this.immuneToPortal = PortalImmunityType.InPortalImmunity;
 		return true;
 	}
-	this.createOutPortal = function(){
+	this.createOutPortal = function(GameState){
 		if(this.inPortal!=null&&!(doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
 								  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
 								  this.X,this.Y,
 								  this.X+this.inPortal.width,this.Y+this.inPortal.height))){
-			this.outPortal = new Portal(null,this.X,this.Y,"#FF0000");
+			this.outPortal = new Portal(GameState,this.X,this.Y,this.outPortalColor);
 			this.outPortal.X = this.outPortal.X-this.outPortal.width/2+this.width/2;
 			this.outPortal.Y = this.outPortal.Y-this.outPortal.height/2+this.height/2;
-			this.immuneToPortal = 2;
+			this.immuneToPortal = PortalImmunityType.OutPortalImmunity;
 			return true;
 		}
 		return false;
-		
 	}
 	this.areaOfOverlap = function(p1x1,p1y1,p1x2,p1y2,p2x1,p2y1,p2x2,p2y2){
 		return (Math.max(p1x1,p2x1)-Math.min(p1x2,p2x2))*(Math.max(p1y1,p2y1)-Math.min(p1y2,p2y2));
@@ -155,6 +165,9 @@ function PlayerCharacter(startX, startY, startColor){
 		clonedPlayerCharacter.inputStack = new Array(); //The stack containing all user actions
 		for(var i = 0; i < this.inputStack.length;i++)
 			clonedPlayerCharacter.inputStack[i] = this.inputStack[i];
+		clonedPlayerCharacter.inPortalColor = this.inPortalColor;
+		clonedPlayerCharacter.outPortalColor = this.outPortalColor;
+		clonedPlayerCharacter.immuneToPortal = this.immuneToPortal;
 		return clonedPlayerCharacter;
 	}
 }
@@ -180,12 +193,13 @@ function Portal(GameState,XPos,YPos,Color){
 	this.clone = function(){
 		var clonedPortal = new Portal();
 		clonedPortal.X = this.X;
-		clonedPortal.Y = this.y;
+		clonedPortal.Y = this.Y;
 		clonedPortal.width = this.width;
 		clonedPortal.height = this.height;
 		if(this.GameState!=null)
 			clonedPortal.GameState = this.GameState.clone(); //WARNING: WATCH FOR SELF REFERENCING PORTALS!
 		clonedPortal.color = this.color;
+		return clonedPortal;
 	}
 }
 
@@ -233,6 +247,7 @@ function ProjectileManager(){
 		for(var i = 0; i < this.projectiles.length; i++)
 			if(this.projectiles[i]!=null)
 				clonedProjectileManager.projectiles[i] = this.projectiles[i].clone();
+		return clonedProjectileManager;
 	}
 }
 
@@ -294,5 +309,6 @@ function TestProjectile(startX, startY, xVel, yVel){
 		clonedTestProjectile.MaxX = this.MaxX;
 		clonedTestProjectile.MaxY = this.MaxY;
 		clonedTestProjectile.color = this.color;
+		return clonedTestProjectile;
 	}
 }

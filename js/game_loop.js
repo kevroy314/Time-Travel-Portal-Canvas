@@ -142,14 +142,14 @@ function ReverseGameLoop(){
 		currentTime = timeTravelEventStartTime-(getTimeTravelAdjustedTime()-timeTravelEventStartTime); //Set the current time
 		while(currentTime<nextRenderTime&&renderSkipsCount<maxRenderSkips){
 			Update(-1);
-			while(pc.inputStack.length>0&&pc.inputStack[pc.inputStack.length-1][1]>nextRenderTime){
+			while(pc.inputStack.length>0&&pc.inputStack[pc.inputStack.length-1].EventTime>nextRenderTime){
 				var eventToProcess = pc.inputStack.pop();
 				removeLinePrintUserInputStack();
-				if(eventToProcess[0] == InputStackEventType.PlayerMovementEvent){
-					pc.move(-eventToProcess[2],-eventToProcess[3]);
+				if(eventToProcess.EventType == InputStackEventType.PlayerMovementEvent){
+					pc.move(-eventToProcess.EventParams.dx,-eventToProcess.EventParams.dy);
 				}
-				else if (eventToProcess[0] == InputStackEventType.PlayerActionEvent){
-					pc = eventToProcess[2].pc.clone();
+				else if (eventToProcess.EventType == InputStackEventType.PlayerActionEvent){
+					pc = eventToProcess.EventParams.gs.pc.clone();
 				}
 			}
 			nextRenderTime-=renderInterval;

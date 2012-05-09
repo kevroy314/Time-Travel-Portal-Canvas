@@ -31,7 +31,7 @@ function HandleKeyEvents(){
 		if(pc.X+dx<0) dx=0; //enforce boundry
 		var dy = 0;
 		pc.move(dx,dy);
-		pc.inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		pc.inputStack.push({EventType: InputStackEventType.PlayerMovementEvent, EventTime:currentTime, EventParams:{dx:dx,dy:dy}});
 		printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 	}
 	if(keyStates[38]){ //Up Key
@@ -39,7 +39,7 @@ function HandleKeyEvents(){
 		var dy = -pc.SuggestedYVel; //enforce suggested speed
 		if(pc.Y+dy<0) dy=0; //enforce boundry
 		pc.move(dx,dy);
-		pc.inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		pc.inputStack.push({EventType: InputStackEventType.PlayerMovementEvent, EventTime:currentTime, EventParams:{dx:dx,dy:dy}});
 		printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 	}
 	if(keyStates[39]){ //Right Key
@@ -47,7 +47,7 @@ function HandleKeyEvents(){
 		if(pc.X+dx+pc.width>canvas.width) dx=0; //enforce boundry
 		var dy = 0;
 		pc.move(dx,dy);
-		pc.inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		pc.inputStack.push({EventType: InputStackEventType.PlayerMovementEvent, EventTime:currentTime, EventParams:{dx:dx,dy:dy}});
 		printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 	}
 	if(keyStates[40]){ //Down Key
@@ -55,29 +55,23 @@ function HandleKeyEvents(){
 		var dy = pc.SuggestedYVel; //enforce suggested speed
 		if(pc.Y+dy+pc.height>canvas.height) dy=0; //enforce boundry
 		pc.move(dx,dy);
-		pc.inputStack.push([InputStackEventType.PlayerMovementEvent,currentTime,dx,dy]);
+		pc.inputStack.push({EventType: InputStackEventType.PlayerMovementEvent, EventTime:currentTime, EventParams:{dx:dx,dy:dy}});
 		printInputStack(InputStackEventType.PlayerMovementEvent,currentTime,dx,dy);
 	}
 	if(keyStates[49]){ //1 key
-		var gs0 = new GameState(currentTime,updateCount,pc!=null?pc.clone():null,testObjs!=null?testObjs.clone():null); //Record the current game state
-		var gs = gs0.clone(); //Generate a game state for the portal
-		
-		gs.pc.createOutPortal(gs0);
+		var gs = new GameState(currentTime,updateCount,pc!=null?pc.clone():null,testObjs!=null?testObjs.clone():null); //Record the current game state
 		
 		pc.createInPortal(gs);
 		
-		pc.inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
+		pc.inputStack.push({EventType:InputStackEventType.PlayerActionEvent,EventTime:currentTime,EventParams:{gs:gs}});
 		printInputStack(InputStackEventType.PlayerActionEvent,currentTime,'portal','in');
 	}
 	if(keyStates[50]){ //2 key
-		var gs0 = new GameState(currentTime,updateCount,pc.clone(),testObjs.clone());
+		var gs = new GameState(currentTime,updateCount,pc.clone(),testObjs.clone());
 		
-		var gs = gs0.clone();
+		pc.createOutPortal(gs);
 		
-		gs.pc.createOutPortal();
-		pc.createOutPortal();
-		
-		pc.inputStack.push([InputStackEventType.PlayerActionEvent,currentTime,gs0,gs]);
+		pc.inputStack.push({EventType:InputStackEventType.PlayerActionEvent,EventTime:currentTime,EventParams:{gs:gs}});
 		printInputStack(InputStackEventType.PlayerActionEvent,currentTime,'portal','out');
 	}
 }
