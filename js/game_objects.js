@@ -1,3 +1,183 @@
+function Simulation(){
+	this.width; //The width of the simulation area
+	this.height; //The height of the simulation area
+	
+	this.startTime; //Time offset from start of application (everything absolute time variable references to this)
+	this.currentTime; //Current simulation time
+	this.timeTravelCumulative; //The amount of time the player has time travelled via portal or continous
+	this.timeTravelEventStartTime; //The start time of a continuous time travel event (reset to 0 by portal time travel)
+	this.timeIsForward; //Boolean representing if time is going forward or reverse
+
+	this.renderInterval; //Number of ticks we skip to keep a pace
+	this.maxRenderSkips; //Number of frames we're allowed to skip rendering	
+	this.nextRenderTime; //Next render tick
+	this.renderSkipsCount; //Number of times we update before rendering for given iteration
+	this.updateCount;
+
+	this.eventStack; //Stack of events the user has executed
+	
+	this.stateRegistry;
+	
+	this.pc; //PlayerCharacter object representing the player (forms circular chain with Portal and GameState objects
+	this.projectiles; //Array of deterministic objects with time-stepped update function
+	
+	this.Initialize = function(width, height, numTestObjects){
+		this.width = width;
+		this.height = height;
+		
+		this.startTime = (new Date).getTime(); //This is our reference time
+		this.currentTime = this.startTime; //Irrelevant
+		this.timeTravelCumulative = 0; //No time travel has happened yet
+		this.timeTravelEventStartTime = 0; //Irrelevant
+		this.timeIsForward = true; //We go forward in time by default
+		
+		//Magic#
+		this.renderInterval = 33; //1000ms/30 ticks per second
+		//Magic#
+		this.maxRenderSkips = 5; //This number can be changed to allow more updates between renders
+		this.nextRenderTime = 0; //Represents when we're going to render again
+		this.renderSkipsCount = 0; //Irrelevant
+		this.updateCount = 0;
+		
+		this.eventStack = new Array();
+		
+		this.stateRegistry = new GameStateRegistry();
+		
+		//Magic#
+		this.pc = new PlayerCharacter(width/2,height/2, "#FFFFFF"); //Player starts in the middle
+		this.pc.X-=this.pc.width/2;
+		this.pc.Y-=this.pc.height/2;
+		
+		this.projectiles = new ProjectileManager();
+		this.projectiles.randomize(numTestObjects,0,0,width,height,-5,-5,5,5); //Magic#
+	}
+	
+	this.render = function(ctx){
+		//Draw the test objects
+		this.projectiles.draw(ctx);
+		
+		//Draw the player
+		this.pc.draw(ctx);
+		
+		//Overlay some stats
+		ctx.fillStyle = "#FFFFFF"; //Magic#
+		ctx.fillText("Current Time: "+ this.currentTime,10,10); //Magic#
+	}
+	
+	this.update = function(dt,keys){
+		if(this.updateCount==0&&dt<0) return;
+	
+		if(dt>0){
+			this.updateCount++;
+			this.handleKeyEvents(keys); //First handle any user input
+		}
+		else if(dt<0){
+			if(this.updateCount==0)
+				return;
+			else
+				this.updateCount--;
+		}
+		this.projectiles.update(this.currentTime,dt,[this.pc]);
+		//this.stateRegistry.removeStatesLaterThan(this.getTimeTravelAdjustedTime()); //Remove states later than current to clean up
+	}
+	
+	//Calculates the relative time given the amount we've time travelled total and the reference time
+	this.getTimeSinceSimulationStart = function(){
+		return (new Date).getTime()-this.startTime;
+	}
+	
+	this.getTimeTravelAdjustedTime = function(){
+		return this.getTimeSinceSimulationStart() - this.timeTravelCumulative;
+	}
+	
+	//Function which loads a game state, adjusts the appropriate timers to allow for state to be loaded while
+	//travelling forward or backwards in time.
+	this.loadGameState = function(registryIndex){
+		if(this.stateRegistry.gameStates[registryIndex].pc!=null)
+			this.pc = this.stateRegistry.gameStates[registryIndex].pc; //Load the player state
+		if(this.stateRegistry.gameStates[registryIndex].projectiles!=null)
+			this.projectiles = this.stateRegistry.gameStates[registryIndex].projectiles; //Clone the test objects
+		this.updateCount = this.stateRegistry.gameStates[registryIndex].updateCount; //Load the update count
+		this.timeTravelCumulative+=(this.currentTime-this.stateRegistry.gameStates[registryIndex].t); //Adjust the cumulative time travel amount relative to the game state
+		this.currentTime = this.getTimeTravelAdjustedTime(); //Set a new current time relative to the amount time travelled
+		this.nextRenderTime = this.currentTime+1; //Tell the render to render next
+	}
+
+	//This function handles key events which trigger while a key is depressed.
+	this.handleKeyEvents = function(keys){
+		if(keys[37]){ //Left Key
+			var dx = -this.pc.SuggestedXVel; //enforce suggested speed
+			if(this.pc.X+dx<0) dx=0; //enforce boundry
+			var dy = 0;
+			
+			this.pc.move(dx,dy,this.timeIsForward);
+			
+			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
+									 currentTime: this.currentTime,
+									 dx: dx,dy: dy});
+		}
+		if(keys[38]){ //Up Key
+			var dx = 0;
+			var dy = -this.pc.SuggestedYVel; //enforce suggested speed
+			if(this.pc.Y+dy<0) dy=0; //enforce boundry
+			
+			this.pc.move(dx,dy,this.timeIsForward);
+			
+			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
+									 currentTime: this.currentTime,
+									 dx: dx,dy: dy});
+		}
+		if(keys[39]){ //Right Key
+			var dx = this.pc.SuggestedXVel; //enforce suggested speed
+			if(this.pc.X+dx+this.pc.width>canvas.width) dx=0; //enforce boundry
+			var dy = 0;
+			
+			this.pc.move(dx,dy,this.timeIsForward);
+			
+			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
+									 currentTime: this.currentTime,
+									 dx: dx,dy: dy});
+		}
+		if(keys[40]){ //Down Key
+			var dx = 0;
+			var dy = this.pc.SuggestedYVel; //enforce suggested speed
+			if(this.pc.Y+dy+this.pc.height>canvas.height) dy=0; //enforce boundry
+			
+			this.pc.move(dx,dy,this.timeIsForward);
+			
+			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
+									 currentTime: this.currentTime,
+									 dx: dx,dy: dy});
+		}
+		if(keys[49]){ //1 key
+			var gs0 = new GameState(this.currentTime,this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
+			
+			var stateIndex = this.stateRegistry.addGameState(gs0);
+			
+			this.pc.createInPortal(stateIndex);
+			
+			if(stateIndex>this.stateRegistry.length) Alert("fail");
+			
+			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
+									 currentTime: this.currentTime,
+									 stateIndex: stateIndex});
+		}
+		if(keys[50]){ //2 key
+			var gs0 = new GameState(this.currentTime,this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
+			
+			var stateIndex = this.stateRegistry.addGameState(gs0);
+			
+			this.pc.createOutPortal(stateIndex);
+			
+			if(stateIndex>this.stateRegistry.length) alert("fail");
+			
+			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
+									 currentTime: this.currentTime,
+									 stateIndex: stateIndex});
+		}
+	}
+}
+
 //Game state object which forms a circular chain with Portal and PlayerCharacter objects
 //Represents the state of the game at a given time 't'
 function GameState(currentTime, currentUpdateCount, currentPlayerState, currentObjectStates){
@@ -11,23 +191,10 @@ function GameState(currentTime, currentUpdateCount, currentPlayerState, currentO
 			clonedGameState.pc = this.pc.clone(); //WARNING: IF PC IS SELF REFERENTIAL THIS WILL CAUSE AN INFINITE LOOP!
 		if(this.objList!=null)
 			clonedGameState.objList = this.objList.clone();
-		clonedGameState.t = this.currentTime;
+		clonedGameState.t = this.t;
 		clonedGameState.updateCount = this.updateCount;
 		return clonedGameState;
 	}
-}
-
-//Function which loads a game state, adjusts the appropriate timers to allow for state to be loaded while
-//travelling forward or backwards in time.
-function LoadGameState(GameState){
-	if(GameState.pc!=null)
-		pc = GameState.pc.clone(); //Load the player state
-	if(GameState.testObjs!=null)
-		testObjs = GameState.testObjs.clone(); //Clone the test objects
-	updateCount = GameState.updateCount; //Load the update count
-	timeTravelCumulative+=(currentTime-GameState.t); //Adjust the cumulative time travel amount relative to the game state
-	currentTime = getTimeTravelAdjustedTime(); //Set a new current time relative to the amount time travelled
-	nextRenderTime = currentTime+1; //Tell the render to render next
 }
 
 //Object which represents the player
@@ -42,19 +209,22 @@ function LoadGameState(GameState){
 //It has two helper functions which help determine if (and how much) a rectangle overlaps with another rectangle.
 //The function tracks portal immunity for both portals allowing bi-directional travel at if required later.
 var InputStackEventType = { PlayerMovementEvent:0, PlayerActionEvent:1 };
+var PortalImmunityType = {NoImmunity: 0, InPortalImmunity: 1, OutPortalImmunity: 2};
 function PlayerCharacter(startX, startY, startColor){
 	this.X = startX;
 	this.Y = startY;
-	this.width = 10;
-	this.height = 10;
-	this.SuggestedXVel = 4;
-	this.SuggestedYVel = 4;
+	this.width = 10; //Magic#
+	this.height = 10; //Magic#
+	this.SuggestedXVel = 4; //Magic#
+	this.SuggestedYVel = 4; //Magic#
 	this.color = startColor;
+	this.inPortalColor = "#0000FF"; //Magic#
+	this.outPortalColor = "#FF0000"; //Magic#
 	this.inPortal = null;
 	this.outPortal = null;
 	this.visible = true;
 	this.inputStack = new Array(); //The stack containing all user actions
-	this.move = function(XVel,YVel){ //FLAG
+	this.move = function(XVel,YVel,timeTravelIsAllowed){ //FLAG
 		var newX = this.X+XVel;
 		var newY = this.Y+YVel;
 		var overlapInPortal = null;
@@ -70,8 +240,8 @@ function PlayerCharacter(startX, startY, startColor){
 									  newX+this.width,newY+this.height);
 			overlapInPortal = overlapInPortalArea>this.width*this.height/2&&overlapInPortalBoolean;
 			if(overlapInPortal){
-				if(this.immuneToPortal!=1&&this.outPortal!=null){
-					this.immuneToPortal = 2;
+				if(this.immuneToPortal!=PortalImmunityType.InPortalImmunity&&this.outPortal!=null){
+					this.immuneToPortal = PortalImmunityType.OutPortalImmunity;
 					return true;
 				}
 			}
@@ -87,16 +257,16 @@ function PlayerCharacter(startX, startY, startColor){
 									   newX+this.width,newY+this.height);
 			overlapOutPortal = overlapOutPortalArea>this.width*this.height/2&&overlapOutPortalBoolean;
 			if(overlapOutPortal){
-				if(this.immuneToPortal!=2&&this.inPortal!=null){
-					if(timeIsForward)
-						LoadGameState(this.inPortal.GameState);
-					this.immuneToPortal = 1;
+				if(this.immuneToPortal!=PortalImmunityType.OutPortalImmunity&&this.inPortal!=null){
+					if(timeTravelIsAllowed)
+						sim.loadGameState(this.inPortal.GameStateRegistryIndex);
+					this.immuneToPortal = PortalImmunityType.InPortalImmunity;
 					return true;
 				}
 			}
 		}
-		if((this.immuneToPortal==1&&!overlapInPortal)||(this.immuneToPortal==2&&!overlapOutPortal))
-			this.immuneToPortal = 0;
+		if((this.immuneToPortal==PortalImmunityType.InPortalImmunity&&!overlapInPortal)||(this.immuneToPortal==PortalImmunityType.OutPortalImmunity&&!overlapOutPortal))
+			this.immuneToPortal = PortalImmunityType.NoImmunity;
 		this.X = newX;
 		this.Y = newY;
 		return false;
@@ -113,23 +283,23 @@ function PlayerCharacter(startX, startY, startColor){
 			ctx.fillRect(this.X,this.Y,this.width,this.height);
 		}
 	}
-	this.createInPortal = function(GameState){
+	this.createInPortal = function(gameStateRegistryIndex){
 		this.outPortal = null;
-		this.inPortal = new Portal(GameState,this.X,this.Y,"#0000FF");
+		this.inPortal = new Portal(gameStateRegistryIndex,this.X,this.Y,this.inPortalColor);
 		this.inPortal.X = this.inPortal.X-this.inPortal.width/2+this.width/2;
 		this.inPortal.Y = this.inPortal.Y-this.inPortal.height/2+this.height/2;
-		this.immuneToPortal = 1;
+		this.immuneToPortal = PortalImmunityType.InPortalImmunity;
 		return true;
 	}
-	this.createOutPortal = function(){
+	this.createOutPortal = function(gameStateRegistryIndex){
 		if(this.inPortal!=null&&!(doRectanglesOverlap(this.inPortal.X,this.inPortal.Y,
 								  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
 								  this.X,this.Y,
 								  this.X+this.inPortal.width,this.Y+this.inPortal.height))){
-			this.outPortal = new Portal(null,this.X,this.Y,"#FF0000");
+			this.outPortal = new Portal(gameStateRegistryIndex,this.X,this.Y,this.outPortalColor);
 			this.outPortal.X = this.outPortal.X-this.outPortal.width/2+this.width/2;
 			this.outPortal.Y = this.outPortal.Y-this.outPortal.height/2+this.height/2;
-			this.immuneToPortal = 2;
+			this.immuneToPortal = PortalImmunityType.OutPortalImmunity;
 			return true;
 		}
 		return false;
@@ -150,7 +320,7 @@ function PlayerCharacter(startX, startY, startColor){
 		if(this.inPortal!=null)
 			clonedPlayerCharacter.inPortal = this.inPortal.clone(); //WARNING: WATCH FOR SELF REFERENCING PORTALS!
 		if(this.outPortal!=null)
-			clonedPlayerCharacter.outPortal = this.inPortal.clone(); //WARNING: WATCH FOR SELF REFERENCING PORTALS!
+			clonedPlayerCharacter.outPortal = this.outPortal.clone(); //WARNING: WATCH FOR SELF REFERENCING PORTALS!
 		clonedPlayerCharacter.visible = this.visible;
 		clonedPlayerCharacter.inputStack = new Array(); //The stack containing all user actions
 		for(var i = 0; i < this.inputStack.length;i++)
@@ -159,19 +329,15 @@ function PlayerCharacter(startX, startY, startColor){
 	}
 }
 
-function doRectanglesOverlap(p1x1,p1y1,p1x2,p1y2,p2x1,p2y1,p2x2,p2y2){
-		return (p1x1<p2x2&&p1x2>p2x1&&p1y1<p2y2&&p1y2>p2y1);
-}
-
 //This object forms a circular group with PlayerCharacter and GameState. It contains basic information about
 //a portal. The portal has a position and a color (although this could be replaced by an image later). It
 //contains the state of the game upon it's creation as well as a function for drawing.
-function Portal(GameState,XPos,YPos,Color){
+function Portal(gameStateRegistryIndex,XPos,YPos,Color){
 	this.X = XPos;
 	this.Y = YPos;
-	this.width = 12;
-	this.height = 19;
-	this.GameState = GameState;
+	this.width = 12; //Magic#
+	this.height = 19; //Magic#
+	this.GameStateRegistryIndex = gameStateRegistryIndex;
 	this.color = Color;
 	this.draw = function(ctx){
 		ctx.fillStyle = this.color;
@@ -180,37 +346,13 @@ function Portal(GameState,XPos,YPos,Color){
 	this.clone = function(){
 		var clonedPortal = new Portal();
 		clonedPortal.X = this.X;
-		clonedPortal.Y = this.y;
+		clonedPortal.Y = this.Y;
 		clonedPortal.width = this.width;
 		clonedPortal.height = this.height;
-		if(this.GameState!=null)
-			clonedPortal.GameState = this.GameState.clone(); //WARNING: WATCH FOR SELF REFERENCING PORTALS!
+		clonedPortal.GameStateRegistryIndex = this.GameStateRegistryIndex;
 		clonedPortal.color = this.color;
+		return clonedPortal;
 	}
-}
-
-//This helper function performs a fill ellipse function
-function drawEllipse(ctx, x, y, w, h) {
-  var kappa = .5522848;
-      ox = (w / 2) * kappa, // control point offset horizontal
-      oy = (h / 2) * kappa, // control point offset vertical
-      xe = x + w,           // x-end
-      ye = y + h,           // y-end
-      xm = x + w / 2,       // x-middle
-      ym = y + h / 2;       // y-middle
-
-  ctx.beginPath();
-  ctx.moveTo(x, ym);
-  ctx.bezierCurveTo(x, ym - oy, xm - ox, y, xm, y);
-  ctx.bezierCurveTo(xm + ox, y, xe, ym - oy, xe, ym);
-  ctx.bezierCurveTo(xe, ym + oy, xm + ox, ye, xm, ye);
-  ctx.bezierCurveTo(xm - ox, ye, x, ym + oy, x, ym);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function randInt(min,max){
-	return Math.round((Math.random()*(max-min))+min);
 }
 
 function ProjectileManager(){
@@ -233,6 +375,7 @@ function ProjectileManager(){
 		for(var i = 0; i < this.projectiles.length; i++)
 			if(this.projectiles[i]!=null)
 				clonedProjectileManager.projectiles[i] = this.projectiles[i].clone();
+		return clonedProjectileManager;
 	}
 }
 
@@ -242,15 +385,15 @@ function ProjectileManager(){
 function TestProjectile(startX, startY, xVel, yVel){
 	this.X = startX;
 	this.Y = startY;
-	this.width = 3;
-	this.height = 3;
+	this.width = 3; //Magic#
+	this.height = 3; //Magic#
 	this.XVel = xVel;
 	this.YVel = yVel;
 	this.MinX = 0;
 	this.MinY = 0;
 	this.MaxX = canvas.width;
 	this.MaxY = canvas.height;
-	this.color = "#FF0000";
+	this.color = "#FF0000"; //Magic#
 	this.update = function(t,dt,collisionObjects){
 		var newX = this.X+this.XVel*dt;
 		var newY = this.Y+this.YVel*dt;
@@ -294,5 +437,26 @@ function TestProjectile(startX, startY, xVel, yVel){
 		clonedTestProjectile.MaxX = this.MaxX;
 		clonedTestProjectile.MaxY = this.MaxY;
 		clonedTestProjectile.color = this.color;
+		return clonedTestProjectile;
+	}
+}
+
+function GameStateRegistry(){
+	this.gameStates = new Array();
+	this.addGameState = function(gameState){
+		var index = this.gameStates.length;
+		this.gameStates[index] = gameState;
+		return index;
+	}
+	this.getGameState = function(index){
+		return this.gameStates[index];
+	}
+	this.removeGameState = function(index){
+		return this.gameStates.splice(index,1)[0];
+	}
+	this.removeStatesLaterThan = function(time){
+		for(var i = this.gameStates.length-1;i>=0;i--)
+			if(this.gameStates[i].t > time)
+				this.gameStates.splice(i,1);
 	}
 }
