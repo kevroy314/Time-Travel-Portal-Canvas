@@ -1,6 +1,8 @@
-function Simulation(){
+function Simulation(width, height, numTestObjects, speed){
 	this.width; //The width of the simulation area
 	this.height; //The height of the simulation area
+	
+	this.speed = speed;
 	
 	this.startTime; //Time offset from start of application (everything absolute time variable references to this)
 	this.currentTime; //Current simulation time
@@ -44,20 +46,25 @@ function Simulation(){
 		this.stateRegistry = new GameStateRegistry();
 		
 		//Magic#
-		this.pc = new PlayerCharacter(width/2,height/2, "#FFFFFF"); //Player starts in the middle
+		this.pc = new PlayerCharacter(width/2, height/2, "#FFFFFF", this); //Player starts in the middle
 		this.pc.X-=this.pc.width/2;
 		this.pc.Y-=this.pc.height/2;
 		
-		this.projectiles = new ProjectileManager();
-		this.projectiles.randomize(numTestObjects,0,0,width,height,-5,-5,5,5); //Magic#
+		this.projectiles = new ProjectileManager(numTestObjects,0,0,width,height,-5,-5,5,5);
 	}
+	
+	//Automatically Initialize
+	if(width!=undefined&&height!=undefined&&numTestObjects!=undefined)
+		this.Initialize(width,height,numTestObjects);
+	else
+		this.Initialize(100,100,10); //Magic#
 	
 	this.render = function(ctx){
 		//Draw the test objects
-		this.projectiles.draw(ctx);
+		this.projectiles.render(ctx);
 		
 		//Draw the player
-		this.pc.draw(ctx);
+		this.pc.render(ctx);
 		
 		//Overlay some stats
 		ctx.fillStyle = "#FFFFFF"; //Magic#
@@ -65,20 +72,21 @@ function Simulation(){
 	}
 	
 	this.update = function(dt,keys){
+		this.stateRegistry.removeStatesLaterThan(sim.getTimeTravelAdjustedTime()); //Remove states later than current to clean up
 		if(this.updateCount==0&&dt<0) return;
 	
 		if(dt>0){
-			this.updateCount++;
+			this.updateCount+=dt;
 			this.handleKeyEvents(keys); //First handle any user input
 		}
 		else if(dt<0){
 			if(this.updateCount==0)
 				return;
 			else
-				this.updateCount--;
+				this.updateCount+=dt;
 		}
 		this.projectiles.update(this.currentTime,dt,[this.pc]);
-		//this.stateRegistry.removeStatesLaterThan(this.getTimeTravelAdjustedTime()); //Remove states later than current to clean up
+		
 	}
 	
 	//Calculates the relative time given the amount we've time travelled total and the reference time
@@ -103,6 +111,16 @@ function Simulation(){
 		this.nextRenderTime = this.currentTime+1; //Tell the render to render next
 	}
 
+	this.characterMoveEvent = function(dx,dy){
+		var timeTravelLocation = this.pc.move(dx,dy,this.timeIsForward);
+		if(timeTravelLocation != -1)
+			this.loadGameState(timeTravelLocation);
+		
+		this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
+								 currentTime: this.currentTime,
+								 dx: dx,dy: dy});
+	}
+	
 	//This function handles key events which trigger while a key is depressed.
 	this.handleKeyEvents = function(keys){
 		if(keys[37]){ //Left Key
@@ -110,44 +128,28 @@ function Simulation(){
 			if(this.pc.X+dx<0) dx=0; //enforce boundry
 			var dy = 0;
 			
-			this.pc.move(dx,dy,this.timeIsForward);
-			
-			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
-									 currentTime: this.currentTime,
-									 dx: dx,dy: dy});
+			this.characterMoveEvent(dx,dy);
 		}
 		if(keys[38]){ //Up Key
 			var dx = 0;
 			var dy = -this.pc.SuggestedYVel; //enforce suggested speed
 			if(this.pc.Y+dy<0) dy=0; //enforce boundry
 			
-			this.pc.move(dx,dy,this.timeIsForward);
-			
-			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
-									 currentTime: this.currentTime,
-									 dx: dx,dy: dy});
+			this.characterMoveEvent(dx,dy);
 		}
 		if(keys[39]){ //Right Key
 			var dx = this.pc.SuggestedXVel; //enforce suggested speed
 			if(this.pc.X+dx+this.pc.width>canvas.width) dx=0; //enforce boundry
 			var dy = 0;
 			
-			this.pc.move(dx,dy,this.timeIsForward);
-			
-			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
-									 currentTime: this.currentTime,
-									 dx: dx,dy: dy});
+			this.characterMoveEvent(dx,dy);
 		}
 		if(keys[40]){ //Down Key
 			var dx = 0;
 			var dy = this.pc.SuggestedYVel; //enforce suggested speed
 			if(this.pc.Y+dy+this.pc.height>canvas.height) dy=0; //enforce boundry
 			
-			this.pc.move(dx,dy,this.timeIsForward);
-			
-			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
-									 currentTime: this.currentTime,
-									 dx: dx,dy: dy});
+			this.characterMoveEvent(dx,dy);
 		}
 		if(keys[49]){ //1 key
 			var gs0 = new GameState(this.currentTime,this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
@@ -155,8 +157,6 @@ function Simulation(){
 			var stateIndex = this.stateRegistry.addGameState(gs0);
 			
 			this.pc.createInPortal(stateIndex);
-			
-			if(stateIndex>this.stateRegistry.length) Alert("fail");
 			
 			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
 									 currentTime: this.currentTime,
@@ -169,8 +169,6 @@ function Simulation(){
 			
 			this.pc.createOutPortal(stateIndex);
 			
-			if(stateIndex>this.stateRegistry.length) alert("fail");
-			
 			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
 									 currentTime: this.currentTime,
 									 stateIndex: stateIndex});
@@ -182,15 +180,15 @@ function Simulation(){
 //Represents the state of the game at a given time 't'
 function GameState(currentTime, currentUpdateCount, currentPlayerState, currentObjectStates){
 	this.pc = currentPlayerState; //Current state of PlayerCharacter variable
-	this.objList = currentObjectStates; //Current state of array of deterministic objects with time-stepped update function
+	this.projectiles = currentObjectStates; //Current state of array of deterministic objects with time-stepped update function
 	this.t = currentTime; //Time of current state
 	this.updateCount = currentUpdateCount;
 	this.clone = function(){
 		var clonedGameState = new GameState();
 		if(this.pc!=null)
 			clonedGameState.pc = this.pc.clone(); //WARNING: IF PC IS SELF REFERENTIAL THIS WILL CAUSE AN INFINITE LOOP!
-		if(this.objList!=null)
-			clonedGameState.objList = this.objList.clone();
+		if(this.projectiles!=null)
+			clonedGameState.projectiles = this.projectiles.clone();
 		clonedGameState.t = this.t;
 		clonedGameState.updateCount = this.updateCount;
 		return clonedGameState;
@@ -242,7 +240,6 @@ function PlayerCharacter(startX, startY, startColor){
 			if(overlapInPortal){
 				if(this.immuneToPortal!=PortalImmunityType.InPortalImmunity&&this.outPortal!=null){
 					this.immuneToPortal = PortalImmunityType.OutPortalImmunity;
-					return true;
 				}
 			}
 		}
@@ -259,9 +256,8 @@ function PlayerCharacter(startX, startY, startColor){
 			if(overlapOutPortal){
 				if(this.immuneToPortal!=PortalImmunityType.OutPortalImmunity&&this.inPortal!=null){
 					if(timeTravelIsAllowed)
-						sim.loadGameState(this.inPortal.GameStateRegistryIndex);
+						return this.inPortal.GameStateRegistryIndex;
 					this.immuneToPortal = PortalImmunityType.InPortalImmunity;
-					return true;
 				}
 			}
 		}
@@ -269,15 +265,15 @@ function PlayerCharacter(startX, startY, startColor){
 			this.immuneToPortal = PortalImmunityType.NoImmunity;
 		this.X = newX;
 		this.Y = newY;
-		return false;
+		return -1; //No time travel!
 	}
-	this.draw = function(ctx){
+	this.render = function(ctx){
 		if(this.visible){
 			if(this.inPortal!=null){
-				this.inPortal.draw(ctx);
+				this.inPortal.render(ctx);
 			}
 			if(this.outPortal!=null){
-				this.outPortal.draw(ctx);
+				this.outPortal.render(ctx);
 			}
 			ctx.fillStyle = this.color;
 			ctx.fillRect(this.X,this.Y,this.width,this.height);
@@ -339,7 +335,7 @@ function Portal(gameStateRegistryIndex,XPos,YPos,Color){
 	this.height = 19; //Magic#
 	this.GameStateRegistryIndex = gameStateRegistryIndex;
 	this.color = Color;
-	this.draw = function(ctx){
+	this.render = function(ctx){
 		ctx.fillStyle = this.color;
 		drawEllipse(ctx,this.X,this.Y,this.width,this.height);
 	}
@@ -355,19 +351,25 @@ function Portal(gameStateRegistryIndex,XPos,YPos,Color){
 	}
 }
 
-function ProjectileManager(){
+function ProjectileManager(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,maxXVel,maxYVel){
 	this.projectiles = new Array();
 	this.randomize = function(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,maxXVel,maxYVel){
 		for(var i = 0; i < numProjectiles;i++)
 			this.projectiles[i] = new TestProjectile(randInt(minX,maxX),randInt(minY,maxY),randInt(minXVel,maxXVel),randInt(minYVel,maxYVel));
 	}
+	
+	if(numProjectiles!=undefined&&minX!=undefined&&minY!=undefined&&maxX!=undefined&&maxY!=undefined&&minXVel!=undefined&&minYVel!=undefined&&maxXVel!=undefined&&maxYVel!=undefined)
+		this.randomize(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,maxXVel,maxYVel);
+	else
+		this.randomize(10,0,0,100,100,-1,-1,1,1); //Magic#
+	
 	this.update = function(t,dt,collisionObjects){
 		for(var i = 0; i < this.projectiles.length;i++)
 			this.projectiles[i].update(t,dt,collisionObjects);
 	}
-	this.draw = function(context){
+	this.render = function(context){
 		for(var i = 0; i < this.projectiles.length;i++)
-			this.projectiles[i].draw(context);
+			this.projectiles[i].render(context);
 	}
 	this.clone = function(){
 		var clonedProjectileManager = new ProjectileManager();
@@ -420,7 +422,7 @@ function TestProjectile(startX, startY, xVel, yVel){
 		this.X = this.X+this.XVel*dt;
 		this.Y = this.Y+this.YVel*dt;
 	}
-	this.draw = function(ctx){
+	this.render = function(ctx){
 		ctx.fillStyle = this.color;
 		ctx.fillRect(this.X,this.Y,this.width,this.height);
 	}
@@ -458,5 +460,8 @@ function GameStateRegistry(){
 		for(var i = this.gameStates.length-1;i>=0;i--)
 			if(this.gameStates[i].t > time)
 				this.gameStates.splice(i,1);
+	}
+	this.getGameStateCount = function(){
+		return this.gameStates.length;
 	}
 }
