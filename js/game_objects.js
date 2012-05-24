@@ -1,25 +1,14 @@
 function Simulation(width, height, numTestObjects, speed){
 	this.width; //The width of the simulation area
 	this.height; //The height of the simulation area
-	
-	this.speed = speed;
-	
-	this.startTime; //Time offset from start of application (everything absolute time variable references to this)
-	this.currentTime; //Current simulation time
-	this.timeTravelCumulative; //The amount of time the player has time travelled via portal or continous
-	this.timeTravelEventStartTime; //The start time of a continuous time travel event (reset to 0 by portal time travel)
-	this.timeIsForward; //Boolean representing if time is going forward or reverse
-
-	this.renderInterval; //Number of ticks we skip to keep a pace
-	this.maxRenderSkips; //Number of frames we're allowed to skip rendering	
-	this.nextRenderTime; //Next render tick
-	this.renderSkipsCount; //Number of times we update before rendering for given iteration
-	this.updateCount;
-
+	this.speed = speed; //The speed of the simulation (scales the speed of all particles and player movement)
+	this.speedInterval = 0.1; //Magic#
+	this.minSpeed = 0.1; //Magic#
+	this.maxSpeed = 10; //Magic#
+	this.updateCount; //The current state of the simulation
+	this.timeIsForward; //Boolean representing if time is going forward or revers
 	this.eventStack; //Stack of events the user has executed
-	
-	this.stateRegistry;
-	
+	this.stateRegistry; //The registry of all remembered states (grows with portal placement)
 	this.pc; //PlayerCharacter object representing the player (forms circular chain with Portal and GameState objects
 	this.projectiles; //Array of deterministic objects with time-stepped update function
 	
@@ -27,18 +16,11 @@ function Simulation(width, height, numTestObjects, speed){
 		this.width = width;
 		this.height = height;
 		
-		this.startTime = (new Date).getTime(); //This is our reference time
-		this.currentTime = this.startTime; //Irrelevant
-		this.timeTravelCumulative = 0; //No time travel has happened yet
-		this.timeTravelEventStartTime = 0; //Irrelevant
 		this.timeIsForward = true; //We go forward in time by default
 		
 		//Magic#
 		this.renderInterval = 33; //1000ms/30 ticks per second
-		//Magic#
-		this.maxRenderSkips = 5; //This number can be changed to allow more updates between renders
-		this.nextRenderTime = 0; //Represents when we're going to render again
-		this.renderSkipsCount = 0; //Irrelevant
+		
 		this.updateCount = 0;
 		
 		this.eventStack = new Array();
@@ -47,13 +29,14 @@ function Simulation(width, height, numTestObjects, speed){
 		
 		//Magic#
 		this.pc = new PlayerCharacter(width/2, height/2, "#FFFFFF", this); //Player starts in the middle
-		this.pc.X-=this.pc.width/2;
+		this.pc.X-=this.pc.width/2; //Start in the middle
 		this.pc.Y-=this.pc.height/2;
 		
+		//Magic#
 		this.projectiles = new ProjectileManager(numTestObjects,0,0,width,height,-5,-5,5,5);
 	}
 	
-	//Automatically Initialize
+	//Automatically Initialize if Parameters are given, otherwise use default values
 	if(width!=undefined&&height!=undefined&&numTestObjects!=undefined)
 		this.Initialize(width,height,numTestObjects);
 	else
@@ -68,36 +51,48 @@ function Simulation(width, height, numTestObjects, speed){
 		
 		//Overlay some stats
 		ctx.fillStyle = "#FFFFFF"; //Magic#
-		ctx.fillText("Current Time: "+ this.currentTime,10,10); //Magic#
+		ctx.fillText("Update Count: "+ this.updateCount,10,10); //Magic#
+		ctx.fillText("Speed: "+ this.speed,10,20); //Magic#
 	}
 	
 	this.update = function(dt,keys){
-		this.stateRegistry.removeStatesLaterThan(sim.getTimeTravelAdjustedTime()); //Remove states later than current to clean up
-		if(this.updateCount==0&&dt<0) return;
+		if(this.updateCount+dt<=0&&dt<0){ //We hit the minimum and want to round out to 0 so we always start in the same position
+			this.projectiles.update(-this.updateCount,[this.pc]);
+			this.updateCount-=this.updateCount;
+			flushAllInputCommands();
+			return;
+		}
 	
-		if(dt>0){
+		if(dt>0){ //When going forward, we move the character then update the particles
 			this.updateCount+=dt;
 			this.handleKeyEvents(keys); //First handle any user input
+			this.projectiles.update(dt,[this.pc]);
 		}
-		else if(dt<0){
-			if(this.updateCount==0)
-				return;
-			else
-				this.updateCount+=dt;
+		else if(dt<0){ //When going backward, we update the particles, then move the character
+			this.updateCount+=dt;
+			this.projectiles.update(this.updateCount,dt,[this.pc]);
+			flushInputCommandsAfterTime(this.updateCount);
 		}
-		this.projectiles.update(this.currentTime,dt,[this.pc]);
-		
+		this.stateRegistry.removeStatesLaterThan(this.updateCount); //Remove states later than current to clean up
 	}
 	
-	//Calculates the relative time given the amount we've time travelled total and the reference time
-	this.getTimeSinceSimulationStart = function(){
-		return (new Date).getTime()-this.startTime;
+	this.flushInputCommandsAfterTime(t){
+		while(this.pc.inputStack.length>0&&this.pc.inputStack[this.pc.inputStack.length-1].updateCount>t){
+			flushInputCommand();
+		}
 	}
-	
-	this.getTimeTravelAdjustedTime = function(){
-		return this.getTimeSinceSimulationStart() - this.timeTravelCumulative;
+	this.flushAllInputCommands(){
+		while(this.pc.inputStack.length>0){
+			flushInputCommand();
+		}
 	}
-	
+	this.flushInputCommand(){
+		var eventToProcess = this.pc.inputStack.pop();
+		if(eventToProcess.movementEventType == InputStackEventType.PlayerMovementEvent)
+			this.pc.move(-eventToProcess.dx,-eventToProcess.dy);
+		else if (eventToProcess.movementEventType == InputStackEventType.PlayerActionEvent)
+			this.pc = this.stateRegistry.getGameState(eventToProcess.stateIndex).pc.clone();
+	}
 	//Function which loads a game state, adjusts the appropriate timers to allow for state to be loaded while
 	//travelling forward or backwards in time.
 	this.loadGameState = function(registryIndex){
@@ -106,9 +101,6 @@ function Simulation(width, height, numTestObjects, speed){
 		if(this.stateRegistry.gameStates[registryIndex].projectiles!=null)
 			this.projectiles = this.stateRegistry.gameStates[registryIndex].projectiles; //Clone the test objects
 		this.updateCount = this.stateRegistry.gameStates[registryIndex].updateCount; //Load the update count
-		this.timeTravelCumulative+=(this.currentTime-this.stateRegistry.gameStates[registryIndex].t); //Adjust the cumulative time travel amount relative to the game state
-		this.currentTime = this.getTimeTravelAdjustedTime(); //Set a new current time relative to the amount time travelled
-		this.nextRenderTime = this.currentTime+1; //Tell the render to render next
 	}
 
 	this.characterMoveEvent = function(dx,dy){
@@ -117,71 +109,80 @@ function Simulation(width, height, numTestObjects, speed){
 			this.loadGameState(timeTravelLocation);
 		
 		this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
-								 currentTime: this.currentTime,
+								 updateCount: this.updateCount,
 								 dx: dx,dy: dy});
 	}
 	
 	//This function handles key events which trigger while a key is depressed.
 	this.handleKeyEvents = function(keys){
-		if(keys[37]){ //Left Key
-			var dx = -this.pc.SuggestedXVel; //enforce suggested speed
+		var scaledSuggestedPlayerXVel = this.pc.SuggestedXVel*this.speed;
+		var scaledSuggestedPlayerYVel = this.pc.SuggestedYVel*this.speed;
+		if(keys[37]){ //Left Key //Magic#
+			var dx = -scaledSuggestedPlayerXVel; //enforce suggested speed
 			if(this.pc.X+dx<0) dx=0; //enforce boundry
 			var dy = 0;
 			
 			this.characterMoveEvent(dx,dy);
 		}
-		if(keys[38]){ //Up Key
+		if(keys[38]){ //Up Key //Magic#
 			var dx = 0;
-			var dy = -this.pc.SuggestedYVel; //enforce suggested speed
+			var dy = -scaledSuggestedPlayerYVel; //enforce suggested speed
 			if(this.pc.Y+dy<0) dy=0; //enforce boundry
 			
 			this.characterMoveEvent(dx,dy);
 		}
-		if(keys[39]){ //Right Key
-			var dx = this.pc.SuggestedXVel; //enforce suggested speed
-			if(this.pc.X+dx+this.pc.width>canvas.width) dx=0; //enforce boundry
+		if(keys[39]){ //Right Key //Magic#
+			var dx = scaledSuggestedPlayerXVel; //enforce suggested speed
+			if(this.pc.X+dx+this.pc.width>width) dx=0; //enforce boundry
 			var dy = 0;
 			
 			this.characterMoveEvent(dx,dy);
 		}
-		if(keys[40]){ //Down Key
+		if(keys[40]){ //Down Key //Magic#
 			var dx = 0;
-			var dy = this.pc.SuggestedYVel; //enforce suggested speed
-			if(this.pc.Y+dy+this.pc.height>canvas.height) dy=0; //enforce boundry
+			var dy = scaledSuggestedPlayerYVel; //enforce suggested speed
+			if(this.pc.Y+dy+this.pc.height>height) dy=0; //enforce boundry
 			
 			this.characterMoveEvent(dx,dy);
 		}
-		if(keys[49]){ //1 key
-			var gs0 = new GameState(this.currentTime,this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
+		if(keys[49]){ //1 key //Magic#
+			var gs0 = new GameState(this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
 			
 			var stateIndex = this.stateRegistry.addGameState(gs0);
 			
 			this.pc.createInPortal(stateIndex);
 			
 			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
-									 currentTime: this.currentTime,
+									 updateCount: this.updateCount,
 									 stateIndex: stateIndex});
 		}
-		if(keys[50]){ //2 key
-			var gs0 = new GameState(this.currentTime,this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
+		if(keys[50]){ //2 key //Magic#
+			var gs0 = new GameState(this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
 			
 			var stateIndex = this.stateRegistry.addGameState(gs0);
 			
 			this.pc.createOutPortal(stateIndex);
 			
 			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
-									 currentTime: this.currentTime,
+									 updateCount: this.updateCount,
 									 stateIndex: stateIndex});
+		}
+		if(keys[187]){ //+= key //Magic#
+			sim.speed+=this.speedInterval;
+			if(sim.speed>this.maxSpeed)sim.speed=this.maxSpeed;
+		}
+		if(keys[189]){ //-_ key //Magic#
+			sim.speed-=this.speedInterval;
+			if(sim.speed<this.minSpeed)sim.speed=this.minSpeed;
 		}
 	}
 }
 
 //Game state object which forms a circular chain with Portal and PlayerCharacter objects
 //Represents the state of the game at a given time 't'
-function GameState(currentTime, currentUpdateCount, currentPlayerState, currentObjectStates){
+function GameState(currentUpdateCount, currentPlayerState, currentObjectStates){
 	this.pc = currentPlayerState; //Current state of PlayerCharacter variable
 	this.projectiles = currentObjectStates; //Current state of array of deterministic objects with time-stepped update function
-	this.t = currentTime; //Time of current state
 	this.updateCount = currentUpdateCount;
 	this.clone = function(){
 		var clonedGameState = new GameState();
@@ -189,7 +190,6 @@ function GameState(currentTime, currentUpdateCount, currentPlayerState, currentO
 			clonedGameState.pc = this.pc.clone(); //WARNING: IF PC IS SELF REFERENTIAL THIS WILL CAUSE AN INFINITE LOOP!
 		if(this.projectiles!=null)
 			clonedGameState.projectiles = this.projectiles.clone();
-		clonedGameState.t = this.t;
 		clonedGameState.updateCount = this.updateCount;
 		return clonedGameState;
 	}
@@ -227,7 +227,7 @@ function PlayerCharacter(startX, startY, startColor){
 		var newY = this.Y+YVel;
 		var overlapInPortal = null;
 		var overlapOutPortal = null;
-		if(this.inPortal!=null){
+		if(this.inPortal!=null){ //Magic# ? This section requires a 50% overlap which is hardcoded into the portal
 			var overlapInPortalArea = this.areaOfOverlap(this.inPortal.X,this.inPortal.Y,
 									  this.inPortal.X+this.inPortal.width,this.inPortal.Y+this.inPortal.height,
 									  newX,newY,
@@ -243,7 +243,7 @@ function PlayerCharacter(startX, startY, startColor){
 				}
 			}
 		}
-		if(this.outPortal!=null){
+		if(this.outPortal!=null){ //Magic# ? This section requires a 50% overlap which is hardcoded into the portal
 			var overlapOutPortalArea = this.areaOfOverlap(this.outPortal.X,this.outPortal.Y,
 									   this.outPortal.X+this.outPortal.width,this.outPortal.Y+this.outPortal.height,
 									   newX,newY,
@@ -355,9 +355,10 @@ function ProjectileManager(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,ma
 	this.projectiles = new Array();
 	this.randomize = function(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,maxXVel,maxYVel){
 		for(var i = 0; i < numProjectiles;i++)
-			this.projectiles[i] = new TestProjectile(randInt(minX,maxX),randInt(minY,maxY),randInt(minXVel,maxXVel),randInt(minYVel,maxYVel));
+			this.projectiles[i] = new TestProjectile(randInt(minX,maxX),randInt(minY,maxY),randInt(minXVel,maxXVel),randInt(minYVel,maxYVel),maxX,maxY);
 	}
 	
+	//If none of the parameters are missing, initialize using input parameters, otherwise initialize with defaults
 	if(numProjectiles!=undefined&&minX!=undefined&&minY!=undefined&&maxX!=undefined&&maxY!=undefined&&minXVel!=undefined&&minYVel!=undefined&&maxXVel!=undefined&&maxYVel!=undefined)
 		this.randomize(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,maxXVel,maxYVel);
 	else
@@ -384,7 +385,7 @@ function ProjectileManager(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,ma
 //This object represents a simple deterministic time-stepped test projectile. It contains it's position, size,
 //velocity, boundry information (prevents projectiles from leaving a specific area) and color. It also contains
 // a function for updating and a function for drawing.
-function TestProjectile(startX, startY, xVel, yVel){
+function TestProjectile(startX, startY, xVel, yVel, maxX, maxY){
 	this.X = startX;
 	this.Y = startY;
 	this.width = 3; //Magic#
@@ -393,10 +394,10 @@ function TestProjectile(startX, startY, xVel, yVel){
 	this.YVel = yVel;
 	this.MinX = 0;
 	this.MinY = 0;
-	this.MaxX = canvas.width;
-	this.MaxY = canvas.height;
+	this.MaxX = maxX;
+	this.MaxY = maxY;
 	this.color = "#FF0000"; //Magic#
-	this.update = function(t,dt,collisionObjects){
+	this.update = function(dt,collisionObjects){
 		var newX = this.X+this.XVel*dt;
 		var newY = this.Y+this.YVel*dt;
 		
@@ -457,9 +458,18 @@ function GameStateRegistry(){
 		return this.gameStates.splice(index,1)[0];
 	}
 	this.removeStatesLaterThan = function(time){
+		var numRemoved = 0;
+		if(time == 0){
+			numRemoved = this.gameStates.length;
+			this.gameStates = new Array();
+			return;
+		}
 		for(var i = this.gameStates.length-1;i>=0;i--)
-			if(this.gameStates[i].t > time)
+			if(this.gameStates[i].t > time){
 				this.gameStates.splice(i,1);
+				numRemoved++;
+			}
+		return numRemoved;
 	}
 	this.getGameStateCount = function(){
 		return this.gameStates.length;

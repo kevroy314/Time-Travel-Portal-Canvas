@@ -2,7 +2,6 @@
 window.onkeydown = OnKeyDownEvent; //When we press a key down, call the KeyDownEvent function (sets keyStates flags)
 window.onkeyup = OnKeyUpEvent; //When we release a key, call the KeyUpEvent function (resets keyStates flags)
 window.onresize = OnWindowResizeEvent; //When we resize the window, call the WindowResizeEvent function
-window.onfocus = OnFocusEvent; //When the window is focused, reset the game timers to avoid "Catch-Up" effect (disable to create "Catch-Up" effect
 
 //This function handles the key being pressed down. It modifies the keyStates array and watches for continuous
 //time travel requests (this is performed via a "dead man's switch" which must be held to continue travelling
@@ -26,10 +25,4 @@ function OnKeyUpEvent(e){
 //Reinitialize the simulation if resized
 function OnWindowResizeEvent(){
 	Initialize();
-}
-
-//This function makes sure the simulation time is not interrupted by losing focus on the window.
-//Without this function, the game would play catchup every time you left the tab and came back (very annoying).
-function OnFocusEvent(){
-	sim.nextRenderTime = sim.getTimeTravelAdjustedTime();
 }
