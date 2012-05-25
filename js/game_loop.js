@@ -23,7 +23,7 @@ function Initialize(){
 
 	keyStates = new Array();
 	
-	sim = new Simulation(canvas.width,canvas.height,25,1);
+	sim = new Simulation(canvas.width,canvas.height,1,1);
 	
 	SimpleGameLoop(); //Start the game!
 }

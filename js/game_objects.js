@@ -10,6 +10,7 @@ function Simulation(width, height, numTestObjects, speed){
 	this.eventStack; //Stack of events the user has executed
 	this.stateRegistry; //The registry of all remembered states (grows with portal placement)
 	this.ghostRegistry;
+	this.playerUIDCounter;
 	this.pc; //PlayerCharacter object representing the player (forms circular chain with Portal and GameState objects
 	this.projectiles; //Array of deterministic objects with time-stepped update function
 	
@@ -29,13 +30,16 @@ function Simulation(width, height, numTestObjects, speed){
 		this.stateRegistry = new GameStateRegistry();
 		this.ghostRegistry = new GhostRegistry();
 		
+		this.playerUIDCounter = 0;
 		//Magic#
-		this.pc = new PlayerCharacter(width/2, height/2, "#FFFFFF", this); //Player starts in the middle
+		this.pc = new PlayerCharacter(width/2, height/2, "#FFFFFF", this.playerUIDCounter); //Player starts in the middle
+		this.playerUIDCounter++;
 		this.pc.X-=this.pc.width/2; //Start in the middle
 		this.pc.Y-=this.pc.height/2;
 		
 		//Magic#
 		this.projectiles = new ProjectileManager(numTestObjects,0,0,width,height,-5,-5,5,5);
+		
 	}
 	
 	//Automatically Initialize if Parameters are given, otherwise use default values
@@ -61,7 +65,7 @@ function Simulation(width, height, numTestObjects, speed){
 	
 	this.update = function(dt,keys){
 		if(this.updateCount+dt<=0&&dt<0){ //We hit the minimum and want to round out to 0 so we always start in the same position
-			this.projectiles.update(-this.updateCount,[this.pc]);
+			this.projectiles.update(this.updateCount,-this.updateCount,[this.pc].concat(this.ghostRegistry.getGhostVisiblePlayers()));
 			this.updateCount-=this.updateCount;
 			this.flushAllInputCommands();
 			this.stateRegistry.clear();
@@ -73,11 +77,11 @@ function Simulation(width, height, numTestObjects, speed){
 			this.updateCount+=dt;
 			this.ghostRegistry.update(this.updateCount,this.timeIsForward, this.stateRegistry);
 			this.handleKeyEvents(keys); //First handle any user input
-			this.projectiles.update(dt,[this.pc]);
+			this.projectiles.update(this.updateCount,dt,[this.pc].concat(this.ghostRegistry.getGhostVisiblePlayers()));
 		}
 		else if(dt<0){ //When going backward, we update the particles, then move the character
 			this.updateCount+=dt;
-			this.projectiles.update(dt,[this.pc]);
+			this.projectiles.update(this.updateCount,dt,[this.pc].concat(this.ghostRegistry.getGhostVisiblePlayers()));
 			this.ghostRegistry.update(this.updateCount,this.timeIsForward, this.stateRegistry);
 			this.flushInputCommandsAfterTime(this.updateCount);
 		}
@@ -122,7 +126,8 @@ function Simulation(width, height, numTestObjects, speed){
 								 
 		if(timeTravelLocation != -1){
 			this.ghostRegistry.resetGhosts();
-			this.ghostRegistry.addGhost(this.stateRegistry	.gameStates[this.pc.inPortal.GameStateRegistryIndex].pc.clone(),this.pc.inputStack,this.stateRegistry.gameStates[this.pc.inPortal.GameStateRegistryIndex].updateCount,this.updateCount);
+			this.ghostRegistry.addGhost(this.stateRegistry.gameStates[this.pc.inPortal.GameStateRegistryIndex].pc.clone(this.playerUIDCounter),this.playerUIDCounter,this.pc.inputStack,this.stateRegistry.gameStates[this.pc.inPortal.GameStateRegistryIndex].updateCount,this.updateCount);
+			this.playerUIDCounter++;
 			this.loadGameState(timeTravelLocation);
 		}
 	}
@@ -224,7 +229,9 @@ function GameState(currentUpdateCount, currentPlayerState, currentObjectStates){
 //The function tracks portal immunity for both portals allowing bi-directional travel at if required later.
 var InputStackEventType = { PlayerMovementEvent:0, PlayerActionEvent:1 };
 var PortalImmunityType = {NoImmunity: 0, InPortalImmunity: 1, OutPortalImmunity: 2};
-function PlayerCharacter(startX, startY, startColor){
+function PlayerCharacter(startX, startY, startColor, uid){
+	this.uid = uid;
+	this.puid = uid;
 	this.X = startX;
 	this.Y = startY;
 	this.width = 10; //Magic#
@@ -320,8 +327,13 @@ function PlayerCharacter(startX, startY, startColor){
 	this.areaOfOverlap = function(p1x1,p1y1,p1x2,p1y2,p2x1,p2y1,p2x2,p2y2){
 		return (Math.max(p1x1,p2x1)-Math.min(p1x2,p2x2))*(Math.max(p1y1,p2y1)-Math.min(p1y2,p2y2));
 	}
-	this.clone = function(){
+	this.clone = function(uid){
 		var clonedPlayerCharacter = new PlayerCharacter();
+		if(uid!=null)
+			clonedPlayerCharacter.uid = uid;
+		else
+			clonedPlayerCharacter.uid = this.uid;
+		clonedPlayerCharacter.puid = this.uid;
 		clonedPlayerCharacter.X = this.X;
 		clonedPlayerCharacter.Y = this.Y;
 		clonedPlayerCharacter.width = this.width;
@@ -380,9 +392,9 @@ function ProjectileManager(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,ma
 	else
 		this.randomize(10,0,0,100,100,-1,-1,1,1); //Magic#
 	
-	this.update = function(dt,collisionObjects){
+	this.update = function(t,dt,collisionObjects){
 		for(var i = 0; i < this.projectiles.length;i++)
-			this.projectiles[i].update(dt,collisionObjects);
+			this.projectiles[i].update(t,dt,collisionObjects);
 	}
 	this.render = function(context){
 		for(var i = 0; i < this.projectiles.length;i++)
@@ -413,7 +425,16 @@ function TestProjectile(startX, startY, xVel, yVel, maxX, maxY){
 	this.MaxX = maxX;
 	this.MaxY = maxY;
 	this.color = "#FF0000"; //Magic#
-	this.update = function(dt,collisionObjects){
+	this.interactedColor = "#0000FF"; //Magic#
+	this.independentColor = "#FF0000"; //Magic#
+	this.collisionEventsExpected = Array();
+	this.update = function(t,dt,collisionObjects){
+		for(var i = this.collisionEventsExpected.length - 1; i >= 0 ;i--)
+			if(this.collisionEventsExpected[i].collisionTime > t && this.collisionEventsExpected[i].iCollidedWith == 0)
+				this.collisionEventsExpected.splice(i,1);
+		if(this.collisionEventsExpected.length == 0)
+			this.color = this.independentColor;
+		
 		var newX = this.X+this.XVel*dt;
 		var newY = this.Y+this.YVel*dt;
 		
@@ -424,16 +445,24 @@ function TestProjectile(startX, startY, xVel, yVel, maxX, maxY){
 			
 		if(collisionObjects.length!=0){
 			for(var i = 0; i < collisionObjects.length;i++){
+				var collisionFlag = false;
 				if(doRectanglesOverlap(this.X,this.Y,this.X+this.width,this.Y+this.height,
 									   collisionObjects[i].X,collisionObjects[i].Y,
 									   collisionObjects[i].X+collisionObjects[i].width,collisionObjects[i].Y+collisionObjects[i].height)){
 					if(this.Y+this.height>collisionObjects[i].Y&&this.Y<collisionObjects[i].Y+collisionObjects[i].height){
 						this.YVel*=-1;
+						collisionFlag = true;
 					}
 					if(this.X+this.width>collisionObjects[i].X&&this.X<collisionObjects[i].X+collisionObjects[i].width){
 						this.XVel*=-1;
+						collisionFlag = true;
 					}
 				}
+				if(collisionFlag)
+					if(dt>0){
+						this.collisionEventsExpected.push({iCollidedWith: collisionObjects[i].uid, collisionTime: t});
+						this.color = this.interactedColor;
+					}
 			}
 		}
 		this.X = this.X+this.XVel*dt;
@@ -495,12 +524,12 @@ function GameStateRegistry(){
 	}
 }
 
-function Ghost(pc,startTime,endTime){
+function Ghost(pc,uid,startTime,endTime){
 	this.startTime = startTime;
 	this.endTime = endTime;
 	this.eventStack = new Array();
-	this.pc = pc.clone();
-	this.pcOrigin = pc.clone();
+	this.pc = pc.clone(uid);
+	this.pcOrigin = pc.clone(uid);
 	this.visible = false;
 	this.ghostColor = "#777777";
 	this.ghostInPortalColor = "#000077";
@@ -581,8 +610,8 @@ function GhostRegistry(){
 	this.clear = function(){
 		this.ghosts = new Array();
 	}
-	this.addGhost = function(pc,inputStack,startTime,endTime){
-		var newGhost = new Ghost(pc,startTime,endTime);
+	this.addGhost = function(pc,uid,inputStack,startTime,endTime){
+		var newGhost = new Ghost(pc,uid,startTime,endTime);
 		newGhost.init(inputStack);
 		this.ghosts.push(newGhost);
 	}
@@ -603,5 +632,29 @@ function GhostRegistry(){
 	this.resetGhosts = function(){
 		for(var i = 0; i < this.ghosts.length;i++)
 			this.ghosts[i].reset();
+	}
+	this.getGhostVisiblePlayers = function(clone){
+		var returnVal = new Array();
+		if(clone){
+			for(var i = 0; i < this.ghosts.length;i++)
+				if(this.ghosts[i].visible)
+					returnVal.push(this.ghosts[i].pc.clone());
+		}
+		else{
+			for(var i = 0; i < this.ghosts.length;i++)
+				if(this.ghosts[i].visible)
+					returnVal.push(this.ghosts[i].pc);
+		}
+		return returnVal;
+	}
+}
+
+function CausalityEngine(){
+	this.events = new Array();
+	this.isParadoxAtTime = function(t,eventsAtT){
+		
+	}
+	this.registerEvent = function(t,eventAtT){
+		
 	}
 }
