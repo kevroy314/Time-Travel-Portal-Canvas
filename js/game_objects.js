@@ -154,7 +154,8 @@ function Simulation(width, height, numTestObjects, speed){
 			
 			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
 									 updateCount: this.updateCount,
-									 stateIndex: stateIndex});
+									 stateIndex: stateIndex,
+									 portalType: "in"});
 		}
 		if(keys[50]){ //2 key //Magic#
 			var gs0 = new GameState(this.updateCount,this.pc.clone(),this.projectiles.clone()); //Record the current game state
@@ -165,7 +166,8 @@ function Simulation(width, height, numTestObjects, speed){
 			
 			this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerActionEvent,
 									 updateCount: this.updateCount,
-									 stateIndex: stateIndex});
+									 stateIndex: stateIndex,
+									 portalType: "out"});
 		}
 		if(keys[187]){ //+= key //Magic#
 			sim.speed+=this.speedInterval;
@@ -473,5 +475,48 @@ function GameStateRegistry(){
 	}
 	this.getGameStateCount = function(){
 		return this.gameStates.length;
+	}
+}
+
+function Ghost(pc,startTime,endTime){
+	this.startTime = startTime;
+	this.endTime = endTime;
+	this.eventStack = new Array();
+	this.pc = pc.clone();
+	this.alive = true;
+	this.ghostColor = "#FF00FF";
+	this.ghostInPortalColor = "#550000";
+	this.ghostOutPortalColr = "#000055";
+	this.currentEvent = 0;
+	this.init = function(inputStack){
+		for(var i = 0; i < this.pc.inputStack.length;i++)
+			if(inputStack[i].updateCount>=this.startTime && inputStack[i].updateCount <= this.endTime)
+				this.eventStack.push(inputStack[i]);
+		this.initColors();
+	}
+	this.initColors = function(){
+		this.pc.color = this.ghostColor;
+		this.pc.inPortalColor = this.ghostInPortalColor;
+		this.pc.outPortalColor = this.ghostOutPortalColor;
+	}
+	this.render = function(ctx){
+		this.pc.render(ctx);
+	}
+	this.update = function(t){
+		/*while(this.eventStack[this.currentEvent].updateCount > t){
+		if(eventStack[this.currentEvent].movementEventType == InputStackEventType.PlayerMovementEvent)
+			this.pc.move(-eventStack[this.currentEvent].dx,-eventStack[this.currentEvent].dy);
+		else if (eventStack[this.currentEvent].movementEventType == InputStackEventType.PlayerActionEvent)
+			if(eventStack[this.currentEvent].portalType == "in")
+				this.pc.createInPortal(eventStack[this.currentEvent].index
+		}*/
+	}
+}
+
+function GhostManager(){
+	this.ghosts = new Array();
+	this.render = function(ctx){
+	}
+	this.update = function(dt){
 	}
 }
