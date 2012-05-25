@@ -9,6 +9,7 @@ function Simulation(width, height, numTestObjects, speed){
 	this.timeIsForward; //Boolean representing if time is going forward or revers
 	this.eventStack; //Stack of events the user has executed
 	this.stateRegistry; //The registry of all remembered states (grows with portal placement)
+	this.ghostRegistry;
 	this.pc; //PlayerCharacter object representing the player (forms circular chain with Portal and GameState objects
 	this.projectiles; //Array of deterministic objects with time-stepped update function
 	
@@ -26,6 +27,7 @@ function Simulation(width, height, numTestObjects, speed){
 		this.eventStack = new Array();
 		
 		this.stateRegistry = new GameStateRegistry();
+		this.ghostRegistry = new GhostRegistry();
 		
 		//Magic#
 		this.pc = new PlayerCharacter(width/2, height/2, "#FFFFFF", this); //Player starts in the middle
@@ -46,6 +48,8 @@ function Simulation(width, height, numTestObjects, speed){
 		//Draw the test objects
 		this.projectiles.render(ctx);
 		
+		this.ghostRegistry.render(ctx);
+		
 		//Draw the player
 		this.pc.render(ctx);
 		
@@ -60,20 +64,26 @@ function Simulation(width, height, numTestObjects, speed){
 			this.projectiles.update(-this.updateCount,[this.pc]);
 			this.updateCount-=this.updateCount;
 			this.flushAllInputCommands();
+			this.stateRegistry.clear();
+			this.ghostRegistry.clear();
 			return;
 		}
 	
 		if(dt>0){ //When going forward, we move the character then update the particles
 			this.updateCount+=dt;
+			this.ghostRegistry.update(this.updateCount,this.timeIsForward, this.stateRegistry);
 			this.handleKeyEvents(keys); //First handle any user input
 			this.projectiles.update(dt,[this.pc]);
 		}
 		else if(dt<0){ //When going backward, we update the particles, then move the character
 			this.updateCount+=dt;
 			this.projectiles.update(dt,[this.pc]);
+			this.ghostRegistry.update(this.updateCount,this.timeIsForward, this.stateRegistry);
 			this.flushInputCommandsAfterTime(this.updateCount);
 		}
-		this.stateRegistry.removeStatesLaterThan(this.updateCount); //Remove states later than current to clean up
+		//TODO : Need new method of garbage collecting game states
+		//this.stateRegistry.removeStatesLaterThan(this.updateCount); //Remove states later than current to clean up
+		this.ghostRegistry.removeGhostsLaterThan(this.updateCount);
 	}
 	
 	this.flushInputCommandsAfterTime = function(t){
@@ -105,12 +115,16 @@ function Simulation(width, height, numTestObjects, speed){
 
 	this.characterMoveEvent = function(dx,dy){
 		var timeTravelLocation = this.pc.move(dx,dy,this.timeIsForward);
-		if(timeTravelLocation != -1)
-			this.loadGameState(timeTravelLocation);
 		
 		this.pc.inputStack.push({movementEventType: InputStackEventType.PlayerMovementEvent,
 								 updateCount: this.updateCount,
 								 dx: dx,dy: dy});
+								 
+		if(timeTravelLocation != -1){
+			this.ghostRegistry.resetGhosts();
+			this.ghostRegistry.addGhost(this.stateRegistry	.gameStates[this.pc.inPortal.GameStateRegistryIndex].pc.clone(),this.pc.inputStack,this.stateRegistry.gameStates[this.pc.inPortal.GameStateRegistryIndex].updateCount,this.updateCount);
+			this.loadGameState(timeTravelLocation);
+		}
 	}
 	
 	//This function handles key events which trigger while a key is depressed.
@@ -448,6 +462,9 @@ function TestProjectile(startX, startY, xVel, yVel, maxX, maxY){
 
 function GameStateRegistry(){
 	this.gameStates = new Array();
+	this.clear = function(){
+		gameStates = new Array();
+	}
 	this.addGameState = function(gameState){
 		var index = this.gameStates.length;
 		this.gameStates[index] = gameState;
@@ -464,10 +481,10 @@ function GameStateRegistry(){
 		if(time == 0){
 			numRemoved = this.gameStates.length;
 			this.gameStates = new Array();
-			return;
+			return numRemoved;
 		}
 		for(var i = this.gameStates.length-1;i>=0;i--)
-			if(this.gameStates[i].t > time){
+			if(this.gameStates[i].updateCount > time){
 				this.gameStates.splice(i,1);
 				numRemoved++;
 			}
@@ -483,13 +500,14 @@ function Ghost(pc,startTime,endTime){
 	this.endTime = endTime;
 	this.eventStack = new Array();
 	this.pc = pc.clone();
-	this.alive = true;
-	this.ghostColor = "#FF00FF";
-	this.ghostInPortalColor = "#550000";
-	this.ghostOutPortalColr = "#000055";
+	this.pcOrigin = pc.clone();
+	this.visible = false;
+	this.ghostColor = "#777777";
+	this.ghostInPortalColor = "#000077";
+	this.ghostOutPortalColor = "#770000";
 	this.currentEvent = 0;
 	this.init = function(inputStack){
-		for(var i = 0; i < this.pc.inputStack.length;i++)
+		for(var i = 0; i < inputStack.length;i++)
 			if(inputStack[i].updateCount>=this.startTime && inputStack[i].updateCount <= this.endTime)
 				this.eventStack.push(inputStack[i]);
 		this.initColors();
@@ -497,26 +515,93 @@ function Ghost(pc,startTime,endTime){
 	this.initColors = function(){
 		this.pc.color = this.ghostColor;
 		this.pc.inPortalColor = this.ghostInPortalColor;
+		if(this.pc.inPortal!=null)
+			this.pc.inPortal.color = this.ghostInPortalColor;
 		this.pc.outPortalColor = this.ghostOutPortalColor;
+		if(this.pc.outPortal!=null)
+			this.pc.outPortal.color = this.ghostOutPortalColor;
+	}
+	this.reset = function(){
+		this.pc = this.pcOrigin.clone();
+		this.initColors();
+		this.currentEvent = 0;
+		this.visible = false;
 	}
 	this.render = function(ctx){
-		this.pc.render(ctx);
+		if(this.visible)
+			this.pc.render(ctx);
 	}
-	this.update = function(t){
-		/*while(this.eventStack[this.currentEvent].updateCount > t){
-		if(eventStack[this.currentEvent].movementEventType == InputStackEventType.PlayerMovementEvent)
-			this.pc.move(-eventStack[this.currentEvent].dx,-eventStack[this.currentEvent].dy);
-		else if (eventStack[this.currentEvent].movementEventType == InputStackEventType.PlayerActionEvent)
-			if(eventStack[this.currentEvent].portalType == "in")
-				this.pc.createInPortal(eventStack[this.currentEvent].index
-		}*/
+	this.update = function(time,timeIsForward,gameStateRegistry){
+		this.visible = ((time <= endTime) && (time >= startTime));
+		if(this.visible && this.currentEvent < this.eventStack.length && this.currentEvent >= 0){
+			if(timeIsForward)
+				while(this.eventStack[this.currentEvent].updateCount < time)
+					this.processEvent(timeIsForward,gameStateRegistry);
+			else
+				while(this.eventStack[this.currentEvent].updateCount > time)
+					this.processEvent(timeIsForward,gameStateRegistry);
+		}
 	}
-}
+	this.processEvent = function(timeIsForward,gameStateRegistry){
+		if(this.eventStack[this.currentEvent].movementEventType == InputStackEventType.PlayerMovementEvent)
+			if(timeIsForward)
+				this.pc.move(this.eventStack[this.currentEvent].dx,this.eventStack[this.currentEvent].dy);
+			else
+				this.pc.move(-this.eventStack[this.currentEvent].dx,-this.eventStack[this.currentEvent].dy);
+		else if (this.eventStack[this.currentEvent].movementEventType == InputStackEventType.PlayerActionEvent)
+			if(timeIsForward){
+				if(this.eventStack[this.currentEvent].portalType == "in")
+					this.pc.createInPortal(this.eventStack[this.currentEvent].stateIndex);
+				if(this.eventStack[this.currentEvent].portalType == "out")
+					this.pc.createOutPortal(this.eventStack[this.currentEvent].stateIndex);
+			}
+			else{
+				var state = this.eventStack[this.currentEvent].stateIndex;
+				this.pc = gameStateRegistry.gameStates[state].pc.clone();
+				this.initColors();
+			}
+		if(timeIsForward) this.currentEvent++;
+		else{
+			this.currentEvent--;
+			if(this.currentEvent<0) this.currentEvent=0;
+		}
+	}
+}	
 
-function GhostManager(){
+function GhostRegistry(){
 	this.ghosts = new Array();
 	this.render = function(ctx){
+		for(var i = 0; i < this.ghosts.length;i++)
+			this.ghosts[i].render(ctx);
 	}
-	this.update = function(dt){
+	this.update = function(time, timeIsForward, gameStateRegistry){
+		for(var i = 0; i < this.ghosts.length;i++)
+			this.ghosts[i].update(time, timeIsForward, gameStateRegistry);
+	}
+	this.clear = function(){
+		this.ghosts = new Array();
+	}
+	this.addGhost = function(pc,inputStack,startTime,endTime){
+		var newGhost = new Ghost(pc,startTime,endTime);
+		newGhost.init(inputStack);
+		this.ghosts.push(newGhost);
+	}
+	this.removeGhostsLaterThan = function(time){
+		var numRemoved = 0;
+		if(time == 0){
+			numRemoved = this.ghosts.length;
+			this.ghosts = new Array();
+			return numRemoved;
+		}
+		for(var i = this.ghosts.length-1; i >= 0;i--)
+			if(this.ghosts[i].startTime > time){
+				this.ghosts.splice(i,1);
+				numRemoved++;
+			}
+		return numRemoved;
+	}
+	this.resetGhosts = function(){
+		for(var i = 0; i < this.ghosts.length;i++)
+			this.ghosts[i].reset();
 	}
 }
