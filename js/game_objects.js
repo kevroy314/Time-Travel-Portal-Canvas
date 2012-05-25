@@ -59,7 +59,7 @@ function Simulation(width, height, numTestObjects, speed){
 		if(this.updateCount+dt<=0&&dt<0){ //We hit the minimum and want to round out to 0 so we always start in the same position
 			this.projectiles.update(-this.updateCount,[this.pc]);
 			this.updateCount-=this.updateCount;
-			flushAllInputCommands();
+			this.flushAllInputCommands();
 			return;
 		}
 	
@@ -70,23 +70,23 @@ function Simulation(width, height, numTestObjects, speed){
 		}
 		else if(dt<0){ //When going backward, we update the particles, then move the character
 			this.updateCount+=dt;
-			this.projectiles.update(this.updateCount,dt,[this.pc]);
-			flushInputCommandsAfterTime(this.updateCount);
+			this.projectiles.update(dt,[this.pc]);
+			this.flushInputCommandsAfterTime(this.updateCount);
 		}
 		this.stateRegistry.removeStatesLaterThan(this.updateCount); //Remove states later than current to clean up
 	}
 	
-	this.flushInputCommandsAfterTime(t){
+	this.flushInputCommandsAfterTime = function(t){
 		while(this.pc.inputStack.length>0&&this.pc.inputStack[this.pc.inputStack.length-1].updateCount>t){
-			flushInputCommand();
+			this.flushInputCommand();
 		}
 	}
-	this.flushAllInputCommands(){
+	this.flushAllInputCommands = function(){
 		while(this.pc.inputStack.length>0){
-			flushInputCommand();
+			this.flushInputCommand();
 		}
 	}
-	this.flushInputCommand(){
+	this.flushInputCommand = function(){
 		var eventToProcess = this.pc.inputStack.pop();
 		if(eventToProcess.movementEventType == InputStackEventType.PlayerMovementEvent)
 			this.pc.move(-eventToProcess.dx,-eventToProcess.dy);
@@ -364,9 +364,9 @@ function ProjectileManager(numProjectiles,minX,minY,maxX,maxY,minXVel,minYVel,ma
 	else
 		this.randomize(10,0,0,100,100,-1,-1,1,1); //Magic#
 	
-	this.update = function(t,dt,collisionObjects){
+	this.update = function(dt,collisionObjects){
 		for(var i = 0; i < this.projectiles.length;i++)
-			this.projectiles[i].update(t,dt,collisionObjects);
+			this.projectiles[i].update(dt,collisionObjects);
 	}
 	this.render = function(context){
 		for(var i = 0; i < this.projectiles.length;i++)
