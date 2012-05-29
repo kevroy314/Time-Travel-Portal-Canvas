@@ -38,7 +38,7 @@ function Simulation(width, height, numTestObjects, speed){
 		this.pc.Y-=this.pc.height/2;
 		
 		//Magic#
-		this.projectiles = new ProjectileManager(numTestObjects,0,0,width,height,-5,-5,5,5);
+		this.projectiles = new ProjectileManager(numTestObjects,0,0,width,height,0,4,0,4);
 		
 	}
 	
@@ -81,9 +81,9 @@ function Simulation(width, height, numTestObjects, speed){
 		}
 		else if(dt<0){ //When going backward, we update the particles, then move the character
 			this.updateCount+=dt;
-			this.projectiles.update(this.updateCount,dt,[this.pc].concat(this.ghostRegistry.getGhostVisiblePlayers()));
 			this.ghostRegistry.update(this.updateCount,this.timeIsForward, this.stateRegistry);
 			this.flushInputCommandsAfterTime(this.updateCount);
+			this.projectiles.update(this.updateCount,dt,[this.pc].concat(this.ghostRegistry.getGhostVisiblePlayers()));
 		}
 		//TODO : Need new method of garbage collecting game states
 		//this.stateRegistry.removeStatesLaterThan(this.updateCount); //Remove states later than current to clean up
@@ -420,6 +420,8 @@ function TestProjectile(startX, startY, xVel, yVel, maxX, maxY){
 	this.height = 3; //Magic#
 	this.XVel = xVel;
 	this.YVel = yVel;
+	this.originalXVel = xVel;
+	this.originalYVel = yVel;
 	this.MinX = 0;
 	this.MinY = 0;
 	this.MaxX = maxX;
@@ -427,46 +429,48 @@ function TestProjectile(startX, startY, xVel, yVel, maxX, maxY){
 	this.color = "#FF0000"; //Magic#
 	this.interactedColor = "#0000FF"; //Magic#
 	this.independentColor = "#FF0000"; //Magic#
-	this.collisionEventsExpected = Array();
+	this.collisionCount = 0;
 	this.update = function(t,dt,collisionObjects){
-		for(var i = this.collisionEventsExpected.length - 1; i >= 0 ;i--)
-			if(this.collisionEventsExpected[i].collisionTime > t && this.collisionEventsExpected[i].iCollidedWith == 0)
-				this.collisionEventsExpected.splice(i,1);
-		if(this.collisionEventsExpected.length == 0)
-			this.color = this.independentColor;
-		
 		var newX = this.X+this.XVel*dt;
 		var newY = this.Y+this.YVel*dt;
-		
+		var newXVel = this.XVel;
+		var newYVel = this.YVel;
 		if(newX+this.width>this.MaxX||newX<this.MinX)
-			this.XVel*=-1;
+			newXVel = -newXVel;
 		if(newY+this.height>this.MaxY||newY<this.MinY)
-			this.YVel*=-1;
+			newYVel = -newYVel;
 			
 		if(collisionObjects.length!=0){
 			for(var i = 0; i < collisionObjects.length;i++){
 				var collisionFlag = false;
 				if(doRectanglesOverlap(this.X,this.Y,this.X+this.width,this.Y+this.height,
 									   collisionObjects[i].X,collisionObjects[i].Y,
-									   collisionObjects[i].X+collisionObjects[i].width,collisionObjects[i].Y+collisionObjects[i].height)){
-					if(this.Y+this.height>collisionObjects[i].Y&&this.Y<collisionObjects[i].Y+collisionObjects[i].height){
-						this.YVel*=-1;
-						collisionFlag = true;
+									   collisionObjects[i].X+collisionObjects[i].width,collisionObjects[i].Y+collisionObjects[i].height))
+					collisionFlag = true;
+				if(collisionFlag){
+					this.xVel = 0;
+					this.YVel = 0;
+					newX = this.X;
+					newY = this.Y;
+					if(dt>0){
+						this.color = this.interactedColor;
+						this.collisionCount++;
 					}
-					if(this.X+this.width>collisionObjects[i].X&&this.X<collisionObjects[i].X+collisionObjects[i].width){
-						this.XVel*=-1;
-						collisionFlag = true;
+					else if(dt<0){
+						this.collisionCount--;
+						if(this.collisionCount==0) this.color = this.independentColor;
 					}
 				}
-				if(collisionFlag)
-					if(dt>0){
-						this.collisionEventsExpected.push({iCollidedWith: collisionObjects[i].uid, collisionTime: t});
-						this.color = this.interactedColor;
-					}
+				else{
+					this.xVel = this.originalXVel;
+					this.yVel = this.originalYVel;
+				}
 			}
 		}
-		this.X = this.X+this.XVel*dt;
-		this.Y = this.Y+this.YVel*dt;
+		this.XVel = newXVel;
+		this.YVel = newYVel;
+		this.X = newX;
+		this.Y = newY;
 	}
 	this.render = function(ctx){
 		ctx.fillStyle = this.color;
@@ -647,6 +651,12 @@ function GhostRegistry(){
 		}
 		return returnVal;
 	}
+}
+
+function Event(time, object, ghostNumber){
+	this.time = time;
+	this.object = object;
+	this.ghostNumber = ghostNumber;
 }
 
 function CausalityEngine(){
